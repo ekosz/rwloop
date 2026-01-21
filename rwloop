@@ -1,0 +1,119 @@
+#!/usr/bin/env bash
+#
+# rwloop - Ralph Wiggum Loop Tool
+# Run autonomous AI coding loops with Claude Code and Sprite VMs
+#
+set -euo pipefail
+
+RWLOOP_VERSION="0.1.0"
+RWLOOP_HOME="${RWLOOP_HOME:-$HOME/.rwloop}"
+RWLOOP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Source utilities
+source "$RWLOOP_DIR/lib/utils.sh"
+
+# Ensure rwloop home exists
+mkdir -p "$RWLOOP_HOME/sessions"
+
+# Copy default templates if not present
+if [[ ! -d "$RWLOOP_HOME/templates" ]]; then
+  cp -r "$RWLOOP_DIR/templates" "$RWLOOP_HOME/templates"
+fi
+
+usage() {
+  cat <<EOF
+rwloop - Ralph Wiggum Loop Tool v$RWLOOP_VERSION
+
+Run autonomous AI coding loops with Claude Code and Sprite VMs.
+
+USAGE:
+    rwloop <command> [options]
+
+COMMANDS:
+    init <prd.md>       Initialize a session from a PRD file
+    tasks               Edit the task list for current session
+    run                 Start the loop on a Sprite VM
+    status              Check status of running session
+    resume              Resume a paused session
+    respond "<msg>"     Respond to a NEEDS_INPUT prompt
+    done                Complete session and create PR
+    stop                Cancel and clean up
+
+OPTIONS:
+    -h, --help          Show this help message
+    -v, --version       Show version
+
+ENVIRONMENT:
+    GITHUB_TOKEN        GitHub token for cloning private repos
+    RWLOOP_HOME         Config directory (default: ~/.rwloop)
+
+EXAMPLES:
+    rwloop init ./docs/feature-prd.md
+    rwloop tasks
+    rwloop run --branch feature/new-auth
+    rwloop respond "Use JWT tokens, not sessions"
+    rwloop done
+
+EOF
+}
+
+# Main command router
+main() {
+  if [[ $# -eq 0 ]]; then
+    usage
+    exit 0
+  fi
+
+  local cmd="$1"
+  shift
+
+  case "$cmd" in
+    init)
+      source "$RWLOOP_DIR/lib/init.sh"
+      cmd_init "$@"
+      ;;
+    tasks)
+      source "$RWLOOP_DIR/lib/init.sh"
+      cmd_tasks "$@"
+      ;;
+    run)
+      source "$RWLOOP_DIR/lib/run.sh"
+      cmd_run "$@"
+      ;;
+    status)
+      source "$RWLOOP_DIR/lib/run.sh"
+      cmd_status "$@"
+      ;;
+    resume)
+      source "$RWLOOP_DIR/lib/run.sh"
+      cmd_resume "$@"
+      ;;
+    respond)
+      source "$RWLOOP_DIR/lib/run.sh"
+      cmd_respond "$@"
+      ;;
+    done)
+      source "$RWLOOP_DIR/lib/run.sh"
+      cmd_done "$@"
+      ;;
+    stop)
+      source "$RWLOOP_DIR/lib/run.sh"
+      cmd_stop "$@"
+      ;;
+    -h|--help|help)
+      usage
+      exit 0
+      ;;
+    -v|--version|version)
+      echo "rwloop v$RWLOOP_VERSION"
+      exit 0
+      ;;
+    *)
+      error "Unknown command: $cmd"
+      echo "Run 'rwloop --help' for usage."
+      exit 1
+      ;;
+  esac
+}
+
+main "$@"
