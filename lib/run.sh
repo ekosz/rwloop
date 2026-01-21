@@ -362,11 +362,16 @@ attach_to_loop() {
   local sprite_id="$1"
 
   echo ""
-  log "Opening console. Run: tmux attach -t rwloop"
-  log "Press Ctrl+b then 'd' to detach from loop"
+  log "Attaching to loop (press Ctrl+b then 'd' to detach)"
   echo ""
 
-  # Open interactive console - user will need to run tmux attach manually
+  # Add auto-attach to bashrc temporarily
+  sprite exec -s "$sprite_id" -- sh -c 'grep -q "auto-attach-rwloop" ~/.bashrc 2>/dev/null || echo "# auto-attach-rwloop
+if [ -n \"\$PS1\" ] && tmux has-session -t rwloop 2>/dev/null; then
+  exec tmux attach-session -t rwloop
+fi" >> ~/.bashrc'
+
+  # Open console - will auto-attach to tmux
   sprite console -s "$sprite_id"
 
   # After exiting console, sync state
