@@ -87,7 +87,7 @@ cmd_run() {
   info "Exit code: $sprite_exit_code"
   info "Output: '$sprite_output'"
 
-  if [[ $sprite_exit_code -ne 0 ]] || [[ -z "$sprite_output" ]]; then
+  if [[ $sprite_exit_code -ne 0 ]]; then
     error "Failed to create Sprite"
     if [[ -n "$sprite_output" ]]; then
       echo "$sprite_output"
@@ -100,7 +100,8 @@ cmd_run() {
     exit 1
   fi
 
-  sprite_id="$sprite_output"
+  # Use the sprite name as the ID (not the command output which has extra text)
+  sprite_id="$sprite_name"
 
   # Save sprite ID
   echo "$sprite_id" > "$session_dir/sprite_id"
@@ -113,6 +114,26 @@ cmd_run() {
   run_loop "$session_dir"
 }
 
+# Copy a file to the sprite using base64 encoding
+copy_to_sprite() {
+  local sprite_id="$1"
+  local local_file="$2"
+  local remote_path="$3"
+
+  local content
+  content=$(base64 < "$local_file")
+  sprite exec -s "$sprite_id" "echo '$content' | base64 -d > '$remote_path'"
+}
+
+# Copy a file from the sprite
+copy_from_sprite() {
+  local sprite_id="$1"
+  local remote_path="$2"
+  local local_file="$3"
+
+  sprite exec -s "$sprite_id" "cat '$remote_path'" > "$local_file"
+}
+
 setup_sprite() {
   local session_dir="$1"
   local token="$2"
@@ -122,7 +143,7 @@ setup_sprite() {
   log "Setting up Sprite environment..."
 
   # Create directories on Sprite
-  sprite exec "$sprite_id" "mkdir -p $SPRITE_SESSION_DIR $SPRITE_REPO_DIR" || {
+  sprite exec -s "$sprite_id" "mkdir -p $SPRITE_SESSION_DIR $SPRITE_REPO_DIR" || {
     error "Failed to create directories on Sprite"
     exit 1
   }
@@ -134,7 +155,7 @@ setup_sprite() {
   branch=$(json_get "$session_dir/session.json" '.branch')
 
   log "Cloning repository..."
-  sprite exec "$sprite_id" "git clone --branch '$branch' '$clone_url' $SPRITE_REPO_DIR" 2>&1 || {
+  sprite exec -s "$sprite_id" "git clone --branch '$branch' '$clone_url' $SPRITE_REPO_DIR" 2>&1 || {
     error "Failed to clone repository"
     exit 1
   }
@@ -144,7 +165,7 @@ setup_sprite() {
   log "Copying session files..."
   for file in prd.md tasks.json state.json history.json; do
     if [[ -f "$session_dir/$file" ]]; then
-      sprite cp "$session_dir/$file" "$sprite_id:$SPRITE_SESSION_DIR/$file" || {
+      copy_to_sprite "$sprite_id" "$session_dir/$file" "$SPRITE_SESSION_DIR/$file" || {
         error "Failed to copy $file to Sprite"
         exit 1
       }
@@ -152,10 +173,10 @@ setup_sprite() {
   done
 
   # Copy templates
-  sprite exec "$sprite_id" "mkdir -p /var/local/rwloop/templates"
+  sprite exec -s "$sprite_id" "mkdir -p /var/local/rwloop/templates"
   for file in "$RWLOOP_HOME/templates"/*.md; do
     if [[ -f "$file" ]]; then
-      sprite cp "$file" "$sprite_id:/var/local/rwloop/templates/$(basename "$file")" || {
+      copy_to_sprite "$sprite_id" "$file" "/var/local/rwloop/templates/$(basename "$file")" || {
         warn "Failed to copy template: $(basename "$file")"
       }
     fi
@@ -275,7 +296,7 @@ run_iteration() {
   # Run Claude on Sprite
   local cmd="cd $SPRITE_REPO_DIR && claude -p '$iterate_prompt' --append-system-prompt '$context_prompt' --dangerously-skip-permissions --max-turns 200 --output-format json"
 
-  sprite exec "$sprite_id" "$cmd" 2>&1 | while IFS= read -r line; do
+  sprite exec -s "$sprite_id" "$cmd" 2>&1 | while IFS= read -r line; do
     # Stream output (simplified - just show text)
     if [[ "$line" == *'"type":"text"'* ]]; then
       echo "$line" | jq -r '.content // empty' 2>/dev/null || true
@@ -296,7 +317,7 @@ sync_state_from_sprite() {
 
   # Copy state files back
   for file in tasks.json state.json history.json; do
-    sprite cp "$sprite_id:$SPRITE_SESSION_DIR/$file" "$session_dir/$file" 2>/dev/null || true
+    copy_from_sprite "$sprite_id" "$SPRITE_SESSION_DIR/$file" "$session_dir/$file" 2>/dev/null || true
   done
 }
 
@@ -442,7 +463,7 @@ cmd_resume() {
   if [[ -f "$session_dir/sprite_id" ]]; then
     local sprite_id
     sprite_id=$(cat "$session_dir/sprite_id")
-    if ! sprite status "$sprite_id" &>/dev/null; then
+    if ! sprite list 2>/dev/null | grep -q "$sprite_id"; then
       log "Previous Sprite no longer exists, creating new one..."
       rm "$session_dir/sprite_id"
 
@@ -493,7 +514,7 @@ cmd_respond() {
   if [[ -f "$session_dir/sprite_id" ]]; then
     local sprite_id
     sprite_id=$(cat "$session_dir/sprite_id")
-    sprite cp "$session_dir/response.txt" "$sprite_id:$SPRITE_SESSION_DIR/response.txt" 2>/dev/null || true
+    copy_to_sprite "$sprite_id" "$session_dir/response.txt" "$SPRITE_SESSION_DIR/response.txt" 2>/dev/null || true
   fi
 
   success "Response saved"
@@ -525,7 +546,7 @@ cmd_done() {
   if [[ -n "$sprite_id" ]]; then
     local branch
     branch=$(json_get "$session_dir/session.json" '.branch')
-    sprite exec "$sprite_id" "cd $SPRITE_REPO_DIR && git push -u origin $branch" 2>&1 || {
+    sprite exec -s "$sprite_id" "cd $SPRITE_REPO_DIR && git push -u origin $branch" 2>&1 || {
       error "Failed to push branch"
       exit 1
     }
@@ -540,7 +561,7 @@ cmd_done() {
   # Cleanup Sprite
   if [[ -n "$sprite_id" ]]; then
     log "Cleaning up Sprite..."
-    sprite delete "$sprite_id" 2>/dev/null || true
+    sprite destroy -s "$sprite_id" 2>/dev/null || true
     rm "$session_dir/sprite_id"
     success "Sprite deleted"
   fi
@@ -588,7 +609,7 @@ Generated by rwloop"
 
   # Create PR
   if [[ -n "$sprite_id" ]]; then
-    sprite exec "$sprite_id" "cd $SPRITE_REPO_DIR && gh pr create --title '$pr_title' --body '$pr_body'" 2>&1 || {
+    sprite exec -s "$sprite_id" "cd $SPRITE_REPO_DIR && gh pr create --title '$pr_title' --body '$pr_body'" 2>&1 || {
       error "Failed to create PR"
       warn "You can create the PR manually"
       return 1
@@ -620,7 +641,7 @@ cmd_stop() {
     local sprite_id
     sprite_id=$(cat "$session_dir/sprite_id")
     log "Deleting Sprite..."
-    sprite delete "$sprite_id" 2>/dev/null || true
+    sprite destroy -s "$sprite_id" 2>/dev/null || true
     rm "$session_dir/sprite_id"
     success "Sprite deleted"
   fi
