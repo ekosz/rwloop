@@ -10,19 +10,34 @@ Implements the "Ralph Wiggum" pattern: stateless agent with stateful controller,
 # 1. Initialize with a PRD
 rwloop init ./docs/my-feature.md
 
-# 2. Review/edit generated tasks
+# 2. (Optional) Run planning phase to analyze codebase
+rwloop plan
+
+# 3. Review/edit generated tasks
 rwloop tasks
 
-# 3. Start the loop on a Sprite VM
+# 4. Start the loop on a Sprite VM
 rwloop run --branch feature/my-feature
 
-# 4. Press Ctrl+C to pause (or let it run to completion)
+# 5. Press Ctrl+C to pause (or let it run to completion)
 
-# 5. Resume later if paused
+# 6. Resume later if paused
 rwloop resume
 
-# 6. When complete, create PR
+# 7. When complete, create PR
 rwloop done
+```
+
+### Refreshing the Plan
+
+If tasks become stale during implementation, refresh while preserving completed work:
+
+```bash
+# Re-analyze codebase and update incomplete tasks
+rwloop plan --refresh
+
+# Or refresh and immediately run
+rwloop run --refresh
 ```
 
 ## Installation
@@ -48,13 +63,19 @@ export PATH="$PATH:$(pwd)/rwloop"
 | Command | Description |
 |---------|-------------|
 | `rwloop init <prd.md>` | Initialize session from PRD, generate tasks |
+| `rwloop plan [--refresh]` | Run planning phase (analyze codebase vs PRD) |
 | `rwloop tasks` | View/edit the task list |
-| `rwloop run [--branch name]` | Start loop on Sprite VM |
+| `rwloop run [--branch name] [--refresh]` | Start loop on Sprite VM |
 | `rwloop status` | Check session status |
 | `rwloop resume` | Resume a paused session |
 | `rwloop respond "msg"` | Respond to NEEDS_INPUT |
 | `rwloop done` | Complete session, create PR |
 | `rwloop stop` | Cancel and cleanup |
+
+### Flags
+
+- `--refresh` - Re-analyze codebase and regenerate/update tasks (preserves completed tasks)
+- `--branch <name>` - Specify branch to work on (default: current branch)
 
 ## Project Setup
 
@@ -76,16 +97,27 @@ This runs automatically after cloning when you `rwloop run`.
 ## How It Works
 
 1. **Init**: Claude reads your PRD and generates a task list (`tasks.json`)
-2. **Run**: Creates a Sprite VM, clones your repo, runs setup, starts the loop
-3. **Loop**: Each iteration, Claude:
+2. **Plan** (optional): Gap analysis between PRD and existing codebase
+3. **Run**: Creates a Sprite VM, clones your repo, runs setup, starts the loop
+4. **Loop**: Each iteration, Claude:
    - Reads state files (PRD, tasks, history, previous state)
    - Finds next incomplete task
-   - Implements and verifies (runs tests)
+   - **Searches codebase first** (don't reinvent existing code)
+   - Implements using existing patterns where possible
+   - **Runs backpressure validations** (build, tests, types, linting)
+   - **Verifies acceptance criteria** before marking complete
    - Commits and pushes changes
    - Updates state files
    - Exits (one task per iteration keeps context small)
-4. **Exit**: Loop pauses on NEEDS_INPUT/BLOCKED, or completes when all tasks pass
-5. **Done**: Create PR, cleanup Sprite
+5. **Exit**: Loop pauses on NEEDS_INPUT/BLOCKED, or completes when all tasks pass
+6. **Done**: Create PR, cleanup Sprite
+
+### Key Guardrails
+
+- **Search Before Implementing**: Agent searches for existing code before writing new implementations
+- **Backpressure System**: All validations (build, tests, types, lint) must pass before committing
+- **Acceptance Criteria**: Each task has verifiable outcomes that must be met
+- **Subagent Strategy**: Uses parallel subagents for reading/searching, sequential for builds/tests
 
 ## State Files
 
@@ -96,6 +128,25 @@ Stored in `~/.rwloop/sessions/<project-hash>/`:
 - `state.json` - Current iteration state (status, summary)
 - `history.json` - Rolling iteration log
 - `session.json` - Session metadata
+- `plan_summary.md` - Summary from planning phase (if run)
+
+### Task Structure
+
+```json
+{
+  "id": 1,
+  "description": "Implement user login endpoint",
+  "category": "feature",
+  "steps": ["Create route", "Add validation", "Write tests"],
+  "acceptance_criteria": [
+    "POST /login returns token for valid credentials",
+    "Invalid credentials return 401 error"
+  ],
+  "passes": false
+}
+```
+
+Tasks include `acceptance_criteria` - verifiable outcomes that must be met before marking complete.
 
 ## Configuration
 

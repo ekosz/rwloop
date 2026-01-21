@@ -70,6 +70,25 @@ Before starting work:
 2. Read these files to understand project conventions
 3. Check `package.json`, `pyproject.toml`, or equivalent for build/test commands
 
+## Subagent Usage
+
+Use subagents strategically to preserve main context and parallelize work:
+
+1. **Reading/Searching: Use subagents liberally**
+   - Fan out codebase exploration to parallel subagents
+   - Each subagent can analyze ~156KB without polluting main context
+   - Useful for: code search, file reading, documentation lookup
+
+2. **Building/Testing: Use 1 subagent at a time**
+   - Builds and tests need sequential execution
+   - Full output visibility is important for debugging
+   - Don't parallelize destructive operations
+
+3. **Context management**
+   - Offload expensive analysis to subagents
+   - Keep main context clean for decision-making
+   - Summarize subagent results before using them
+
 ## Important Rules
 
 1. **Read state files first** - Always start by reading tasks.json, state.json, and history.json

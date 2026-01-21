@@ -16,6 +16,7 @@ cmd_run() {
 
   local branch=""
   local token=""
+  local refresh=false
 
   # Parse arguments
   while [[ $# -gt 0 ]]; do
@@ -28,12 +29,23 @@ cmd_run() {
         token="$2"
         shift 2
         ;;
+      --refresh)
+        refresh=true
+        shift
+        ;;
       *)
         error "Unknown option: $1"
         exit 1
         ;;
     esac
   done
+
+  # Run planning refresh if requested
+  if [[ "$refresh" == "true" ]]; then
+    log "Running plan refresh before starting loop..."
+    source "$RWLOOP_DIR/lib/init.sh"
+    cmd_plan --refresh
+  fi
 
   local session_dir
   session_dir=$(get_session_dir)

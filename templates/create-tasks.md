@@ -34,6 +34,11 @@ Output ONLY a JSON array of tasks. No explanation, no markdown code blocks, just
       "Add build script to package.json",
       "Verify tsc compiles without errors"
     ],
+    "acceptance_criteria": [
+      "tsconfig.json exists with strict: true",
+      "npm run build completes without errors",
+      "TypeScript files compile successfully"
+    ],
     "passes": false
   },
   {
@@ -46,10 +51,25 @@ Output ONLY a JSON array of tasks. No explanation, no markdown code blocks, just
       "Write integration tests",
       "Update API documentation"
     ],
+    "acceptance_criteria": [
+      "POST /auth/login returns JWT token for valid credentials",
+      "Invalid credentials return 401 with error message",
+      "Token contains user ID and expiration",
+      "Integration tests cover success and failure cases"
+    ],
     "passes": false
   }
 ]
 ```
+
+## Acceptance Criteria Guidelines
+
+Each task MUST have `acceptance_criteria` - a list of verifiable outcomes:
+
+1. **Focus on WHAT works, not HOW** - Describe observable behavior, not implementation details
+2. **Be specific and testable** - Each criterion should be verifiable
+3. **Cover success and failure cases** - Include edge cases where relevant
+4. **Derive from PRD requirements** - Trace back to original requirements
 
 ## Guidelines
 

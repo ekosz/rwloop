@@ -156,6 +156,127 @@ EOF
   echo "[]" > "$session_dir/history.json"
 }
 
+cmd_plan() {
+  local refresh=false
+
+  # Parse arguments
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --refresh)
+        refresh=true
+        shift
+        ;;
+      *)
+        error "Unknown option: $1"
+        exit 1
+        ;;
+    esac
+  done
+
+  require_session
+  check_dependencies
+
+  local session_dir
+  session_dir=$(get_session_dir)
+
+  if [[ ! -f "$session_dir/prd.md" ]]; then
+    error "No PRD found. Run 'rwloop init <prd.md>' first."
+    exit 1
+  fi
+
+  log "Running planning phase..."
+  if [[ "$refresh" == "true" ]]; then
+    info "Refresh mode: preserving completed tasks"
+  fi
+
+  # Run planning with Claude locally (analyzes codebase against PRD)
+  run_planning "$session_dir" "$refresh"
+
+  # Show results
+  if [[ -f "$session_dir/tasks.json" ]]; then
+    local task_count
+    task_count=$(jq 'length' "$session_dir/tasks.json")
+    local complete_count
+    complete_count=$(jq '[.[] | select(.passes == true)] | length' "$session_dir/tasks.json")
+    success "Plan complete: $task_count tasks ($complete_count completed)"
+  fi
+
+  # Show summary if generated
+  if [[ -f "$session_dir/plan_summary.md" ]]; then
+    echo ""
+    log "Plan Summary:"
+    cat "$session_dir/plan_summary.md"
+  fi
+
+  echo ""
+  echo "Next steps:"
+  echo "  rwloop tasks        # Review/edit tasks"
+  echo "  rwloop run          # Start the loop"
+}
+
+run_planning() {
+  local session_dir="$1"
+  local refresh="$2"
+  local template_path="$RWLOOP_DIR/templates/plan.md"
+  local context_path="$RWLOOP_DIR/templates/context.md"
+
+  # Build the prompt
+  local prompt
+  prompt=$(cat "$template_path")
+
+  if [[ "$refresh" == "true" ]]; then
+    prompt="$prompt
+
+---
+
+NOTE: This is a --refresh operation. Read existing tasks.json and preserve completed tasks (passes: true). Re-evaluate and update incomplete tasks based on current codebase state."
+  fi
+
+  log "Running Claude for planning..."
+
+  # Run Claude with planning prompt
+  local output_file
+  output_file=$(mktemp)
+
+  claude -p "$prompt" \
+    --append-system-prompt "$(cat "$context_path")" \
+    --dangerously-skip-permissions \
+    --max-turns 50 \
+    --output-format text > "$output_file" 2>&1 &
+  local claude_pid=$!
+
+  spinner $claude_pid "Analyzing codebase and generating plan..."
+
+  wait $claude_pid
+  local exit_code=$?
+
+  local output
+  output=$(cat "$output_file")
+  rm -f "$output_file"
+
+  if [[ $exit_code -ne 0 ]]; then
+    error "Claude planning failed"
+    echo "$output"
+    exit 1
+  fi
+
+  # Verify tasks.json was created/updated
+  if [[ ! -f "$session_dir/tasks.json" ]]; then
+    error "Planning did not generate tasks.json"
+    echo "Claude output:"
+    echo "$output" | head -50
+    exit 1
+  fi
+
+  # Validate JSON
+  if ! jq . "$session_dir/tasks.json" &>/dev/null; then
+    error "Invalid tasks.json generated"
+    exit 1
+  fi
+
+  success "Planning complete"
+}
+
 cmd_tasks() {
   require_session
 

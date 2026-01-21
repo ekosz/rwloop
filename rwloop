@@ -28,8 +28,9 @@ USAGE:
 
 COMMANDS:
     init <prd.md>       Initialize a session from a PRD file
+    plan [--refresh]    Run planning phase (analyze codebase, generate tasks)
     tasks               Edit the task list for current session
-    run                 Start the loop on a Sprite VM
+    run [--refresh]     Start the loop on a Sprite VM
     status              Check status of running session
     resume              Resume a paused session
     respond "<msg>"     Respond to a NEEDS_INPUT prompt
@@ -39,6 +40,8 @@ COMMANDS:
 OPTIONS:
     -h, --help          Show this help message
     -v, --version       Show version
+    --refresh           Re-analyze codebase and update tasks (preserves completed)
+    --branch <name>     Branch to work on (default: current branch)
 
 ENVIRONMENT:
     GITHUB_TOKEN        GitHub token for cloning private repos
@@ -46,8 +49,11 @@ ENVIRONMENT:
 
 EXAMPLES:
     rwloop init ./docs/feature-prd.md
+    rwloop plan                          # Initial planning
+    rwloop plan --refresh                # Update plan after changes
     rwloop tasks
     rwloop run --branch feature/new-auth
+    rwloop run --refresh                 # Refresh plan then run
     rwloop respond "Use JWT tokens, not sessions"
     rwloop done
 
@@ -68,6 +74,10 @@ main() {
     init)
       source "$RWLOOP_DIR/lib/init.sh"
       cmd_init "$@"
+      ;;
+    plan)
+      source "$RWLOOP_DIR/lib/init.sh"
+      cmd_plan "$@"
       ;;
     tasks)
       source "$RWLOOP_DIR/lib/init.sh"
