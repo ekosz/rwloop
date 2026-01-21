@@ -249,6 +249,18 @@ setup_sprite() {
   }
   success "Repository cloned"
 
+  # Run setup script if it exists in the repo
+  log "Checking for setup script..."
+  if sprite exec -s "$sprite_id" -- test -f "$SPRITE_REPO_DIR/.rwloop/setup.sh" 2>/dev/null; then
+    log "Running .rwloop/setup.sh..."
+    sprite exec -s "$sprite_id" -- sh -c "cd $SPRITE_REPO_DIR && chmod +x .rwloop/setup.sh && ./.rwloop/setup.sh" 2>&1 || {
+      warn "Setup script failed (continuing anyway)"
+    }
+    success "Setup script completed"
+  else
+    info "No .rwloop/setup.sh found, skipping"
+  fi
+
   # Copy session files to Sprite
   log "Copying session files..."
   for file in prd.md tasks.json state.json history.json; do
