@@ -15,6 +15,9 @@ You are working in a git repository at `/var/local/rwloop/repo/`. Session state 
 
 ## State Files
 
+### prd.md
+The original Product Requirements Document. Read this first to understand the overall goal and context for the tasks you're completing.
+
 ### tasks.json
 Array of tasks to complete:
 ```json

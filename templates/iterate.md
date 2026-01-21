@@ -5,6 +5,7 @@ You are in iteration mode. Follow these steps exactly:
 ## Step 1: Read State Files
 
 Read these files from `/var/local/rwloop/session/`:
+- `prd.md` - The original Product Requirements Document (read this first to understand context)
 - `tasks.json` - Current task list
 - `state.json` - Previous iteration state
 - `history.json` - Iteration history
