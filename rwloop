@@ -85,6 +85,10 @@ main() {
       source "$RWLOOP_DIR/lib/run.sh"
       cmd_resume "$@"
       ;;
+    attach)
+      source "$RWLOOP_DIR/lib/run.sh"
+      cmd_attach "$@"
+      ;;
     respond)
       source "$RWLOOP_DIR/lib/run.sh"
       cmd_respond "$@"
