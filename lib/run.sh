@@ -389,7 +389,8 @@ run_iteration() {
       echo "$line" | jq -r '.message.content[]?.text // .content // empty' 2>/dev/null || true
     elif [[ "$line" == *'"type":"result"'* ]]; then
       info "Claude finished"
-    elif [[ "$line" == *'Error'* ]] || [[ "$line" == *'error'* ]]; then
+    elif [[ "$line" == "Error:"* ]] || [[ "$line" == "error:"* ]]; then
+      # Only show lines that START with Error/error (actual error messages, not JSON)
       warn "$line"
     fi
   done
