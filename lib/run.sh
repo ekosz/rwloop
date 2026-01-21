@@ -135,6 +135,50 @@ cmd_run() {
   run_loop "$session_dir"
 }
 
+# Get local Claude credentials and copy to sprite
+setup_claude_credentials() {
+  local sprite_id="$1"
+  local credentials=""
+
+  log "Setting up Claude credentials..."
+
+  # Try macOS Keychain first
+  if [[ "$(uname)" == "Darwin" ]]; then
+    credentials=$(security find-generic-password -s "Claude Code-credentials" -w 2>/dev/null || echo "")
+  fi
+
+  # Fall back to file-based credentials
+  if [[ -z "$credentials" ]]; then
+    local cred_paths=(
+      "$HOME/.claude/.credentials.json"
+      "$HOME/.config/claude/.credentials.json"
+    )
+    for cred_path in "${cred_paths[@]}"; do
+      if [[ -f "$cred_path" ]]; then
+        credentials=$(cat "$cred_path")
+        break
+      fi
+    done
+  fi
+
+  if [[ -z "$credentials" ]]; then
+    error "Claude credentials not found. Run 'claude login' first."
+    return 1
+  fi
+
+  # Create .claude directory on sprite and write credentials
+  sprite exec -s "$sprite_id" -- mkdir -p /var/local/rwloop/.claude
+
+  # Write credentials via base64 to avoid quoting issues
+  local encoded
+  encoded=$(echo "$credentials" | base64)
+  sprite exec -s "$sprite_id" -- sh -c "echo '$encoded' | base64 -d > /var/local/rwloop/.claude/.credentials.json"
+
+  # Set HOME so Claude can find credentials
+  # Also set XDG_CONFIG_HOME as fallback
+  success "Claude credentials copied to sprite"
+}
+
 # Copy a file to the sprite using base64 encoding
 copy_to_sprite() {
   local sprite_id="$1"
@@ -166,6 +210,12 @@ setup_sprite() {
   # Create directories on Sprite
   sprite exec -s "$sprite_id" -- mkdir -p "$SPRITE_SESSION_DIR" "$SPRITE_REPO_DIR" || {
     error "Failed to create directories on Sprite"
+    exit 1
+  }
+
+  # Setup Claude credentials
+  setup_claude_credentials "$sprite_id" || {
+    error "Failed to setup Claude credentials"
     exit 1
   }
 
@@ -329,7 +379,8 @@ run_iteration() {
 
   # Run Claude on Sprite
   log "Running Claude on sprite..."
-  local cmd="cd $SPRITE_REPO_DIR && claude -p \"\$(cat $prompt_file)\" --append-system-prompt \"\$(cat $context_file)\" --dangerously-skip-permissions --max-turns 200 --output-format stream-json --verbose"
+  # Set HOME to where we put credentials so Claude can find them
+  local cmd="cd $SPRITE_REPO_DIR && HOME=/var/local/rwloop claude -p \"\$(cat $prompt_file)\" --append-system-prompt \"\$(cat $context_file)\" --dangerously-skip-permissions --max-turns 200 --output-format stream-json --verbose"
 
   set +e
   sprite exec -s "$sprite_id" -- sh -c "$cmd" 2>&1 | while IFS= read -r line; do
