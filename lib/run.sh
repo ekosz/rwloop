@@ -242,7 +242,11 @@ run_loop() {
     log "=== Iteration $iteration ==="
 
     # Run one iteration
-    run_iteration "$session_dir" "$iteration"
+    if ! run_iteration "$session_dir" "$iteration"; then
+      error "Iteration failed"
+      handle_pause "$session_dir" "iteration_failed"
+      return
+    fi
 
     # Sync state from Sprite
     sync_state_from_sprite "$session_dir"
@@ -325,7 +329,7 @@ run_iteration() {
 
   # Run Claude on Sprite
   log "Running Claude on sprite..."
-  local cmd="cd $SPRITE_REPO_DIR && claude -p \"\$(cat $prompt_file)\" --append-system-prompt \"\$(cat $context_file)\" --dangerously-skip-permissions --max-turns 200 --output-format stream-json"
+  local cmd="cd $SPRITE_REPO_DIR && claude -p \"\$(cat $prompt_file)\" --append-system-prompt \"\$(cat $context_file)\" --dangerously-skip-permissions --max-turns 200 --output-format stream-json --verbose"
 
   set +e
   sprite exec -s "$sprite_id" -- sh -c "$cmd" 2>&1 | while IFS= read -r line; do
@@ -342,7 +346,8 @@ run_iteration() {
   set -e
 
   if [[ $claude_exit -ne 0 ]]; then
-    warn "Claude exited with code $claude_exit"
+    error "Claude exited with code $claude_exit"
+    return 1
   fi
 
   # Update iteration count in session
