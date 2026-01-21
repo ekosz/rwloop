@@ -575,6 +575,17 @@ cmd_resume() {
       sprite_id=$(sprite create "$sprite_name" 2>&1)
       echo "$sprite_id" > "$session_dir/sprite_id"
       setup_sprite "$session_dir" "$token"
+    else
+      log "Reusing existing Sprite: $sprite_id"
+      # Check if repo still exists on sprite
+      if ! sprite exec -s "$sprite_id" -- test -d "$SPRITE_REPO_DIR/.git" 2>/dev/null; then
+        warn "Repo not found on sprite, re-running setup..."
+        local token
+        token=$(get_github_token) || warn "No GitHub token found"
+        setup_sprite "$session_dir" "$token"
+      else
+        success "Repo still exists on sprite"
+      fi
     fi
   fi
 
