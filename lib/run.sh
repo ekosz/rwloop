@@ -66,11 +66,23 @@ cmd_run() {
   log "Creating Sprite VM..."
   local sprite_name="rwloop-$(get_project_id)"
   local sprite_id
+  local sprite_output
 
-  sprite_id=$(sprite create --name "$sprite_name" 2>&1) || {
-    error "Failed to create Sprite"
+  sprite_output=$(sprite create --name "$sprite_name" 2>&1)
+  local sprite_exit_code=$?
+
+  if [[ $sprite_exit_code -ne 0 ]]; then
+    error "Failed to create Sprite (exit code: $sprite_exit_code)"
+    error "Output: $sprite_output"
+    echo ""
+    echo "Troubleshooting:"
+    echo "  - Is the 'sprite' CLI installed? Run: sprite --version"
+    echo "  - Are you authenticated? Run: sprite auth login"
+    echo "  - Check sprite status: sprite list"
     exit 1
-  }
+  fi
+
+  sprite_id="$sprite_output"
 
   # Save sprite ID
   echo "$sprite_id" > "$session_dir/sprite_id"
