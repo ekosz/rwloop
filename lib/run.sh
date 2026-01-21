@@ -362,15 +362,16 @@ attach_to_loop() {
   local sprite_id="$1"
 
   echo ""
-  log "Attaching to loop (press 'd' to detach, loop continues in background)"
+  log "Opening console. Run: tmux attach -t rwloop"
+  log "Press Ctrl+b then 'd' to detach from loop"
   echo ""
 
-  # Attach to tmux - this will show output and allow 'd' to detach
-  sprite console -s "$sprite_id" -- tmux attach-session -t rwloop
+  # Open interactive console - user will need to run tmux attach manually
+  sprite console -s "$sprite_id"
 
-  # After detaching, sync state
+  # After exiting console, sync state
   echo ""
-  log "Detached from loop"
+  log "Exited console"
 
   # Check if loop is still running
   if is_loop_running "$sprite_id"; then
