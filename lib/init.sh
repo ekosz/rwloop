@@ -82,15 +82,28 @@ generate_tasks() {
 
 $prd_content"
 
-  log "Running Claude to generate tasks..."
+  # Run Claude in background with spinner
+  local output_file
+  output_file=$(mktemp)
 
-  # Run Claude to generate tasks JSON
+  claude -p "$prompt" --output-format text > "$output_file" 2>&1 &
+  local claude_pid=$!
+
+  spinner $claude_pid "Generating tasks with Claude..."
+
+  # Check if Claude succeeded
+  wait $claude_pid
+  local exit_code=$?
+
   local output
-  output=$(claude -p "$prompt" --output-format text 2>&1) || {
+  output=$(cat "$output_file")
+  rm -f "$output_file"
+
+  if [[ $exit_code -ne 0 ]]; then
     error "Claude failed to generate tasks"
     echo "$output"
     exit 1
-  }
+  fi
 
   # Extract JSON array from output
   # The output might have explanation text before/after the JSON
