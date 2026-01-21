@@ -32,6 +32,7 @@ For the current task:
 2. Implement the required changes
 3. Run tests to verify (`npm test`, `pytest`, etc.)
 4. If tests pass, commit with a descriptive message
+5. Push to the remote (`git push`)
 
 ### If you get stuck:
 - Need clarification? Set `status: "NEEDS_INPUT"` and `question: "your question"`
@@ -75,7 +76,7 @@ Add a new entry:
 
 1. **ONE task per iteration then STOP** - Complete exactly one task, update state files, then EXIT
 2. **Verify before marking complete** - Run tests, check the code works
-3. **Commit after completing** - One commit per task
+3. **Commit and push after completing** - One commit per task, push immediately
 4. **Always update state files** - This is how continuity works
 5. **Be honest about progress** - Don't mark tasks complete if they're not
 
