@@ -319,7 +319,7 @@ setup_sprite() {
 # Check if loop is running in tmux on sprite
 is_loop_running() {
   local sprite_id="$1"
-  sprite exec -s "$sprite_id" -- tmux has-session -t rwloop 2>/dev/null
+  sprite exec -s "$sprite_id" -- sh -c "tmux has-session -t rwloop" 2>/dev/null
 }
 
 # Start the loop in tmux on sprite
@@ -347,10 +347,9 @@ start_loop_on_sprite() {
   }
 
   # Make runner executable and start in tmux
-  sprite exec -s "$sprite_id" -- chmod +x /var/local/rwloop/loop-runner.sh
+  sprite exec -s "$sprite_id" -- sh -c "chmod +x /var/local/rwloop/loop-runner.sh"
 
-  sprite exec -s "$sprite_id" -- tmux new-session -d -s rwloop \
-    "cd /var/local/rwloop/repo && /var/local/rwloop/loop-runner.sh; echo '[Loop ended. Press enter to close]'; read" || {
+  sprite exec -s "$sprite_id" -- sh -c "tmux new-session -d -s rwloop 'cd /var/local/rwloop/repo && /var/local/rwloop/loop-runner.sh; echo Loop ended. Press enter to close; read'" || {
     error "Failed to start tmux session"
     return 1
   }
