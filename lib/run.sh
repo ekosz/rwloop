@@ -77,10 +77,10 @@ cmd_run() {
     exit 1
   fi
 
-  info "Running: sprite create --name $sprite_name"
+  info "Running: sprite create $sprite_name"
   # Temporarily disable set -e to capture exit code
   set +e
-  sprite_output=$(sprite create --name "$sprite_name" 2>&1)
+  sprite_output=$(sprite create "$sprite_name" 2>&1)
   local sprite_exit_code=$?
   set -e
 
@@ -452,7 +452,7 @@ cmd_resume() {
 
       # Create and setup new Sprite
       local sprite_name="rwloop-$(get_project_id)"
-      sprite_id=$(sprite create --name "$sprite_name" 2>&1)
+      sprite_id=$(sprite create "$sprite_name" 2>&1)
       echo "$sprite_id" > "$session_dir/sprite_id"
       setup_sprite "$session_dir" "$token"
     fi
