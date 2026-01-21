@@ -16,7 +16,11 @@ rwloop tasks
 # 3. Start the loop on a Sprite VM
 rwloop run --branch feature/my-feature
 
-# 4. When complete, create PR
+# 4. Press 'd' to detach (loop continues in background)
+# 5. Reconnect anytime with:
+rwloop attach
+
+# 6. When complete, create PR
 rwloop done
 ```
 
@@ -24,13 +28,10 @@ rwloop done
 
 ```bash
 # Clone the repo
-git clone https://github.com/YOUR_USERNAME/rwloop.git
+git clone https://github.com/ekosz/rwloop.git
 
-# Add to PATH (or symlink)
+# Add to PATH
 export PATH="$PATH:$(pwd)/rwloop"
-
-# Or copy to a project
-cp -r rwloop /path/to/your/project/.rwloop-tool
 ```
 
 ## Requirements
@@ -48,23 +49,65 @@ cp -r rwloop /path/to/your/project/.rwloop-tool
 | `rwloop init <prd.md>` | Initialize session from PRD, generate tasks |
 | `rwloop tasks` | View/edit the task list |
 | `rwloop run [--branch name]` | Start loop on Sprite VM |
-| `rwloop status` | Check session status |
-| `rwloop resume` | Resume paused session |
+| `rwloop attach` | Reconnect to running loop |
+| `rwloop status` | Check session status (shows if loop running) |
+| `rwloop resume` | Attach if running, otherwise start loop |
 | `rwloop respond "msg"` | Respond to NEEDS_INPUT |
 | `rwloop done` | Complete session, create PR |
 | `rwloop stop` | Cancel and cleanup |
 
+## Detach & Reattach
+
+The loop runs in a tmux session on the Sprite, so you can disconnect and reconnect anytime:
+
+```bash
+# Start the loop
+rwloop run
+
+# While running, press 'd' to detach
+# The loop continues running on the Sprite!
+
+# Close your laptop, travel, etc.
+
+# Later, reconnect:
+rwloop attach
+
+# Or check status first:
+rwloop status
+# Output:
+# Loop:        running in background
+#              Run 'rwloop attach' to reconnect
+```
+
+## Project Setup
+
+Create `.rwloop/setup.md` in your repo with plain-text instructions for setting up the environment. Claude will read this and figure out what to do:
+
+```markdown
+This is a Phoenix + Elixir project.
+
+Please ensure:
+- Elixir is properly installed
+- Dependencies are fetched (mix deps.get)
+- The project compiles (mix compile)
+- PostgreSQL is installed and running
+- The database is set up so tests can run (mix ecto.setup)
+```
+
+This runs automatically after cloning when you `rwloop run`.
+
 ## How It Works
 
 1. **Init**: Claude reads your PRD and generates a task list (`tasks.json`)
-2. **Run**: Creates a Sprite VM, clones your repo, starts the loop
-3. **Loop**: Each iteration, Claude:
+2. **Run**: Creates a Sprite VM, clones your repo, runs setup, starts the loop
+3. **Loop** (runs on Sprite in tmux): Each iteration, Claude:
    - Reads state files (tasks, history, previous state)
    - Finds next incomplete task
    - Implements and verifies (runs tests)
    - Commits changes
    - Updates state files
-4. **Exit**: Loop exits when all tasks pass, or on NEEDS_INPUT/BLOCKED
+   - Exits (one task per iteration keeps context small)
+4. **Exit**: Loop pauses on NEEDS_INPUT/BLOCKED, or completes when all tasks pass
 5. **Done**: Push branch, create PR, cleanup Sprite
 
 ## State Files
@@ -82,18 +125,18 @@ Stored in `~/.rwloop/sessions/<project-hash>/`:
 Environment variables:
 
 ```bash
-GITHUB_TOKEN        # For cloning private repos
-RWLOOP_HOME         # Config dir (default: ~/.rwloop)
+GITHUB_TOKEN           # For cloning private repos (or use 'gh auth login')
+RWLOOP_HOME            # Config dir (default: ~/.rwloop)
 RWLOOP_MAX_ITERATIONS  # Default: 50
 RWLOOP_MAX_DURATION    # Hours, default: 4
-RWLOOP_STUCK_THRESHOLD # Default: 3
+RWLOOP_STUCK_THRESHOLD # Iterations without progress before pausing, default: 3
 ```
 
 ## Status Values
 
 - `CONTINUE` - More work to do
 - `DONE` - All tasks complete
-- `NEEDS_INPUT` - Agent needs clarification
+- `NEEDS_INPUT` - Agent needs clarification (run `rwloop respond`)
 - `BLOCKED` - Agent hit an error
 
 ## License
