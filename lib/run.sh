@@ -316,94 +316,216 @@ setup_sprite() {
   success "Sprite setup complete"
 }
 
-# Check if loop is running in tmux on sprite
-is_loop_running() {
-  local sprite_id="$1"
-  sprite exec -s "$sprite_id" -- sh -c "tmux has-session -t rwloop" 2>/dev/null
-}
-
-# Start the loop in tmux on sprite
-start_loop_on_sprite() {
-  local session_dir="$1"
-  local sprite_id
-  sprite_id=$(cat "$session_dir/sprite_id")
-
-  log "Starting loop on sprite..."
-
-  # Copy loop runner script
-  copy_to_sprite "$sprite_id" "$RWLOOP_DIR/templates/loop-runner.sh" "/var/local/rwloop/loop-runner.sh" || {
-    error "Failed to copy loop runner"
-    return 1
-  }
-
-  # Copy templates for the loop
-  copy_to_sprite "$sprite_id" "$RWLOOP_DIR/templates/iterate.md" "$SPRITE_SESSION_DIR/iterate_prompt.md" || {
-    error "Failed to copy iterate prompt"
-    return 1
-  }
-  copy_to_sprite "$sprite_id" "$RWLOOP_DIR/templates/context.md" "$SPRITE_SESSION_DIR/context_prompt.md" || {
-    error "Failed to copy context prompt"
-    return 1
-  }
-
-  # Make runner executable and start in tmux
-  sprite exec -s "$sprite_id" -- sh -c "chmod +x /var/local/rwloop/loop-runner.sh"
-
-  sprite exec -s "$sprite_id" -- sh -c "tmux new-session -d -s rwloop 'cd /var/local/rwloop/repo && /var/local/rwloop/loop-runner.sh; echo Loop ended. Press enter to close; read'" || {
-    error "Failed to start tmux session"
-    return 1
-  }
-
-  success "Loop started in background"
-}
-
-# Attach to the running loop
-attach_to_loop() {
-  local sprite_id="$1"
-
-  echo ""
-  log "Attaching to loop (press Ctrl+b then 'd' to detach)"
-  echo ""
-
-  # Add auto-attach to bashrc temporarily
-  sprite exec -s "$sprite_id" -- sh -c 'grep -q "auto-attach-rwloop" ~/.bashrc 2>/dev/null || echo "# auto-attach-rwloop
-if [ -n \"\$PS1\" ] && tmux has-session -t rwloop 2>/dev/null; then
-  exec tmux attach-session -t rwloop
-fi" >> ~/.bashrc'
-
-  # Open console - will auto-attach to tmux
-  sprite console -s "$sprite_id"
-
-  # After exiting console, sync state
-  echo ""
-  log "Exited console"
-
-  # Check if loop is still running
-  if is_loop_running "$sprite_id"; then
-    success "Loop still running in background"
-    echo "Run 'rwloop attach' to reconnect"
-  else
-    info "Loop has stopped"
-  fi
-}
-
+# Run the iteration loop locally, executing Claude on the sprite
 run_loop() {
   local session_dir="$1"
   local sprite_id
   sprite_id=$(cat "$session_dir/sprite_id")
 
-  # Start loop if not already running
-  if ! is_loop_running "$sprite_id"; then
-    start_loop_on_sprite "$session_dir" || return 1
-  else
-    log "Loop already running"
+  local iteration=0
+  local start_time
+  start_time=$(date +%s)
+  local max_seconds=$((MAX_DURATION_HOURS * 3600))
+
+  log "Starting iteration loop..."
+  log "Press Ctrl+C to pause"
+  echo ""
+
+  # Handle Ctrl+C gracefully
+  trap 'handle_pause "$session_dir" "user_interrupt"; exit 0' INT
+
+  while true; do
+    iteration=$((iteration + 1))
+
+    # Check iteration limit
+    if [[ $iteration -gt $MAX_ITERATIONS ]]; then
+      warn "Max iterations ($MAX_ITERATIONS) reached"
+      notify "rwloop" "Max iterations reached" "critical"
+      handle_pause "$session_dir" "max_iterations"
+      return
+    fi
+
+    # Check duration limit
+    local elapsed=$(($(date +%s) - start_time))
+    if [[ $elapsed -gt $max_seconds ]]; then
+      warn "Max duration (${MAX_DURATION_HOURS}h) exceeded"
+      notify "rwloop" "Max duration exceeded" "critical"
+      handle_pause "$session_dir" "max_duration"
+      return
+    fi
+
+    log "=== Iteration $iteration ==="
+
+    # Run one iteration
+    if ! run_iteration "$session_dir" "$iteration"; then
+      error "Iteration failed"
+      handle_pause "$session_dir" "iteration_failed"
+      return
+    fi
+
+    # Sync state from Sprite
+    sync_state_from_sprite "$session_dir"
+
+    # Read state
+    local status
+    status=$(json_get "$session_dir/state.json" '.status')
+    local summary
+    summary=$(json_get "$session_dir/state.json" '.summary')
+
+    info "Status: $status"
+    info "Summary: $summary"
+
+    # Handle status
+    case "$status" in
+      DONE)
+        if all_tasks_complete "$session_dir"; then
+          success "All tasks complete!"
+          notify "rwloop" "All tasks complete! Run 'rwloop done' to create PR." "normal"
+          handle_complete "$session_dir"
+          return
+        else
+          warn "Agent said DONE but tasks incomplete, continuing..."
+        fi
+        ;;
+      NEEDS_INPUT)
+        local question
+        question=$(json_get "$session_dir/state.json" '.question')
+        warn "Agent needs input: $question"
+        notify "rwloop" "Input needed: $question" "critical"
+        handle_pause "$session_dir" "needs_input"
+        return
+        ;;
+      BLOCKED)
+        local error_msg
+        error_msg=$(json_get "$session_dir/state.json" '.error')
+        error "Agent blocked: $error_msg"
+        notify "rwloop" "Agent blocked: $error_msg" "critical"
+        handle_pause "$session_dir" "blocked"
+        return
+        ;;
+      CONTINUE)
+        # Check for stuck
+        if is_stuck "$session_dir"; then
+          warn "No progress detected in $STUCK_THRESHOLD iterations"
+          notify "rwloop" "Agent appears stuck" "critical"
+          handle_pause "$session_dir" "stuck"
+          return
+        fi
+        ;;
+      *)
+        warn "Unknown status: $status"
+        ;;
+    esac
+
+    # Brief pause between iterations
+    sleep 2
+  done
+}
+
+run_iteration() {
+  local session_dir="$1"
+  local iteration="$2"
+  local sprite_id
+  sprite_id=$(cat "$session_dir/sprite_id")
+
+  # Copy prompts to sprite
+  local prompt_file="$SPRITE_SESSION_DIR/iterate_prompt.md"
+  local context_file="$SPRITE_SESSION_DIR/context_prompt.md"
+
+  copy_to_sprite "$sprite_id" "$RWLOOP_DIR/templates/iterate.md" "$prompt_file" || {
+    error "Failed to copy iterate prompt to sprite"
+    return 1
+  }
+  copy_to_sprite "$sprite_id" "$RWLOOP_DIR/templates/context.md" "$context_file" || {
+    error "Failed to copy context prompt to sprite"
+    return 1
+  }
+
+  # Run Claude on Sprite
+  log "Running Claude on sprite..."
+  local cmd="cd $SPRITE_REPO_DIR && HOME=/var/local/rwloop claude -p \"\$(cat $prompt_file)\" --append-system-prompt \"\$(cat $context_file)\" --dangerously-skip-permissions --max-turns 200 --output-format stream-json --verbose"
+
+  set +e
+  sprite exec -s "$sprite_id" -- sh -c "$cmd" 2>&1 | while IFS= read -r line; do
+    # Stream output - show assistant text
+    if [[ "$line" == *'"type":"assistant"'* ]] || [[ "$line" == *'"type":"text"'* ]]; then
+      echo "$line" | jq -r '.message.content[]?.text // .content // empty' 2>/dev/null || true
+    elif [[ "$line" == *'"type":"result"'* ]]; then
+      info "Claude finished"
+    elif [[ "$line" == "Error:"* ]] || [[ "$line" == "error:"* ]]; then
+      warn "$line"
+    fi
+  done
+  local claude_exit=${PIPESTATUS[0]}
+  set -e
+
+  if [[ $claude_exit -ne 0 ]]; then
+    error "Claude exited with code $claude_exit"
+    return 1
   fi
 
-  # Attach to it
-  attach_to_loop "$sprite_id"
+  # Update iteration count in session
+  local config
+  config=$(read_session_config)
+  config=$(echo "$config" | jq --argjson i "$iteration" '.iteration = $i')
+  write_session_config "$config"
+}
 
-  # Sync state after detaching
-  sync_state_from_sprite "$session_dir"
+is_stuck() {
+  local session_dir="$1"
+  local history_file="$session_dir/history.json"
+
+  if [[ ! -f "$history_file" ]]; then
+    return 1
+  fi
+
+  local history_length
+  history_length=$(jq 'length' "$history_file")
+
+  if [[ $history_length -lt $STUCK_THRESHOLD ]]; then
+    return 1
+  fi
+
+  # Check if tasks_completed changed in last N iterations
+  local recent_completions
+  recent_completions=$(jq -r "[.[-$STUCK_THRESHOLD:][].tasks_completed] | unique | length" "$history_file")
+
+  [[ "$recent_completions" -eq 1 ]]
+}
+
+handle_pause() {
+  local session_dir="$1"
+  local reason="$2"
+
+  local config
+  config=$(read_session_config)
+  config=$(echo "$config" | jq --arg r "$reason" '.status = "paused" | .pause_reason = $r | .paused_at = now')
+  write_session_config "$config"
+
+  echo ""
+  warn "Session paused: $reason"
+  echo ""
+  echo "To continue:"
+  echo "  rwloop resume       # Resume the loop"
+  echo "  rwloop respond      # Provide input (if NEEDS_INPUT)"
+  echo "  rwloop status       # Check current status"
+  echo "  rwloop stop         # Cancel and cleanup"
+}
+
+handle_complete() {
+  local session_dir="$1"
+
+  local config
+  config=$(read_session_config)
+  config=$(echo "$config" | jq '.status = "complete" | .completed_at = now')
+  write_session_config "$config"
+
+  echo ""
+  success "Session complete!"
+  echo ""
+  echo "Next steps:"
+  echo "  rwloop done         # Create PR and cleanup"
+  echo "  rwloop status       # Review final status"
 }
 
 sync_state_from_sprite() {
@@ -480,14 +602,8 @@ cmd_status() {
     echo ""
     echo "Sprite ID:   $sprite_id"
 
-    # Check if loop is running
     if sprite list 2>/dev/null | grep -q "$sprite_id"; then
-      if is_loop_running "$sprite_id"; then
-        echo -e "Loop:        ${GREEN}running in background${NC}"
-        echo "             Run 'rwloop attach' to reconnect"
-      else
-        echo "Loop:        not running"
-      fi
+      echo "Sprite:      running"
     else
       echo "Sprite:      not found (destroyed?)"
     fi
@@ -496,60 +612,12 @@ cmd_status() {
   echo ""
 }
 
-cmd_attach() {
-  require_session
-
-  local session_dir
-  session_dir=$(get_session_dir)
-
-  if [[ ! -f "$session_dir/sprite_id" ]]; then
-    error "No sprite found. Run 'rwloop run' first."
-    exit 1
-  fi
-
-  local sprite_id
-  sprite_id=$(cat "$session_dir/sprite_id")
-
-  # Check if sprite exists
-  if ! sprite list 2>/dev/null | grep -q "$sprite_id"; then
-    error "Sprite no longer exists. Run 'rwloop run' to create a new one."
-    exit 1
-  fi
-
-  # Check if loop is running
-  if ! is_loop_running "$sprite_id"; then
-    error "Loop is not running. Use 'rwloop resume' to start it."
-    exit 1
-  fi
-
-  attach_to_loop "$sprite_id"
-
-  # Sync state after detaching
-  sync_state_from_sprite "$session_dir"
-}
-
 cmd_resume() {
   require_session
 
   local session_dir
   session_dir=$(get_session_dir)
 
-  # Check if sprite exists and loop is running - if so, just attach
-  if [[ -f "$session_dir/sprite_id" ]]; then
-    local sprite_id
-    sprite_id=$(cat "$session_dir/sprite_id")
-
-    if sprite list 2>/dev/null | grep -q "$sprite_id"; then
-      if is_loop_running "$sprite_id"; then
-        log "Loop already running, attaching..."
-        attach_to_loop "$sprite_id"
-        sync_state_from_sprite "$session_dir"
-        return
-      fi
-    fi
-  fi
-
-  # Otherwise, normal resume logic
   local config
   config=$(read_session_config)
   local status

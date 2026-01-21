@@ -16,9 +16,10 @@ rwloop tasks
 # 3. Start the loop on a Sprite VM
 rwloop run --branch feature/my-feature
 
-# 4. Press 'd' to detach (loop continues in background)
-# 5. Reconnect anytime with:
-rwloop attach
+# 4. Press Ctrl+C to pause (or let it run to completion)
+
+# 5. Resume later if paused
+rwloop resume
 
 # 6. When complete, create PR
 rwloop done
@@ -49,35 +50,11 @@ export PATH="$PATH:$(pwd)/rwloop"
 | `rwloop init <prd.md>` | Initialize session from PRD, generate tasks |
 | `rwloop tasks` | View/edit the task list |
 | `rwloop run [--branch name]` | Start loop on Sprite VM |
-| `rwloop attach` | Reconnect to running loop |
-| `rwloop status` | Check session status (shows if loop running) |
-| `rwloop resume` | Attach if running, otherwise start loop |
+| `rwloop status` | Check session status |
+| `rwloop resume` | Resume a paused session |
 | `rwloop respond "msg"` | Respond to NEEDS_INPUT |
 | `rwloop done` | Complete session, create PR |
 | `rwloop stop` | Cancel and cleanup |
-
-## Detach & Reattach
-
-The loop runs in a tmux session on the Sprite, so you can disconnect and reconnect anytime:
-
-```bash
-# Start the loop
-rwloop run
-
-# While running, press 'd' to detach
-# The loop continues running on the Sprite!
-
-# Close your laptop, travel, etc.
-
-# Later, reconnect:
-rwloop attach
-
-# Or check status first:
-rwloop status
-# Output:
-# Loop:        running in background
-#              Run 'rwloop attach' to reconnect
-```
 
 ## Project Setup
 
@@ -100,15 +77,15 @@ This runs automatically after cloning when you `rwloop run`.
 
 1. **Init**: Claude reads your PRD and generates a task list (`tasks.json`)
 2. **Run**: Creates a Sprite VM, clones your repo, runs setup, starts the loop
-3. **Loop** (runs on Sprite in tmux): Each iteration, Claude:
-   - Reads state files (tasks, history, previous state)
+3. **Loop**: Each iteration, Claude:
+   - Reads state files (PRD, tasks, history, previous state)
    - Finds next incomplete task
    - Implements and verifies (runs tests)
-   - Commits changes
+   - Commits and pushes changes
    - Updates state files
    - Exits (one task per iteration keeps context small)
 4. **Exit**: Loop pauses on NEEDS_INPUT/BLOCKED, or completes when all tasks pass
-5. **Done**: Push branch, create PR, cleanup Sprite
+5. **Done**: Create PR, cleanup Sprite
 
 ## State Files
 
