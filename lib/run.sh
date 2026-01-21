@@ -220,7 +220,7 @@ run_loop() {
   echo ""
 
   while true; do
-    ((iteration++))
+    iteration=$((iteration + 1))
 
     # Check iteration limit
     if [[ $iteration -gt $MAX_ITERATIONS ]]; then
@@ -309,20 +309,41 @@ run_iteration() {
   local sprite_id
   sprite_id=$(cat "$session_dir/sprite_id")
 
-  # Build the iteration prompt
-  local context_prompt iterate_prompt
-  context_prompt=$(cat "$RWLOOP_HOME/templates/context.md")
-  iterate_prompt=$(cat "$RWLOOP_HOME/templates/iterate.md")
+  # Build the iteration prompt - write to temp files to avoid quoting issues
+  local prompt_file="/var/local/rwloop/session/iterate_prompt.md"
+  local context_file="/var/local/rwloop/session/context_prompt.md"
+
+  # Copy prompts to sprite
+  copy_to_sprite "$sprite_id" "$RWLOOP_HOME/templates/iterate.md" "$prompt_file" || {
+    error "Failed to copy iterate prompt to sprite"
+    return 1
+  }
+  copy_to_sprite "$sprite_id" "$RWLOOP_HOME/templates/context.md" "$context_file" || {
+    error "Failed to copy context prompt to sprite"
+    return 1
+  }
 
   # Run Claude on Sprite
-  local cmd="cd $SPRITE_REPO_DIR && claude -p '$iterate_prompt' --append-system-prompt '$context_prompt' --dangerously-skip-permissions --max-turns 200 --output-format json"
+  log "Running Claude on sprite..."
+  local cmd="cd $SPRITE_REPO_DIR && claude -p \"\$(cat $prompt_file)\" --append-system-prompt \"\$(cat $context_file)\" --dangerously-skip-permissions --max-turns 200 --output-format stream-json"
 
+  set +e
   sprite exec -s "$sprite_id" -- sh -c "$cmd" 2>&1 | while IFS= read -r line; do
-    # Stream output (simplified - just show text)
-    if [[ "$line" == *'"type":"text"'* ]]; then
-      echo "$line" | jq -r '.content // empty' 2>/dev/null || true
+    # Stream output - show assistant text
+    if [[ "$line" == *'"type":"assistant"'* ]] || [[ "$line" == *'"type":"text"'* ]]; then
+      echo "$line" | jq -r '.message.content[]?.text // .content // empty' 2>/dev/null || true
+    elif [[ "$line" == *'"type":"result"'* ]]; then
+      info "Claude finished"
+    elif [[ "$line" == *'Error'* ]] || [[ "$line" == *'error'* ]]; then
+      warn "$line"
     fi
   done
+  local claude_exit=${PIPESTATUS[0]}
+  set -e
+
+  if [[ $claude_exit -ne 0 ]]; then
+    warn "Claude exited with code $claude_exit"
+  fi
 
   # Update iteration count in session
   local config
