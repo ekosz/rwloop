@@ -12,13 +12,10 @@ RWLOOP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Source utilities
 source "$RWLOOP_DIR/lib/utils.sh"
 
-# Ensure rwloop home exists
+# Ensure rwloop home exists (for sessions)
 mkdir -p "$RWLOOP_HOME/sessions"
 
-# Copy default templates if not present
-if [[ ! -d "$RWLOOP_HOME/templates" ]]; then
-  cp -r "$RWLOOP_DIR/templates" "$RWLOOP_HOME/templates"
-fi
+# Templates are always read from $RWLOOP_DIR/templates (source directory)
 
 usage() {
   cat <<EOF

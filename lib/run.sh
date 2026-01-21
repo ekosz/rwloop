@@ -245,7 +245,7 @@ setup_sprite() {
 
   # Copy templates
   sprite exec -s "$sprite_id" -- mkdir -p /var/local/rwloop/templates
-  for file in "$RWLOOP_HOME/templates"/*.md; do
+  for file in "$RWLOOP_DIR/templates"/*.md; do
     if [[ -f "$file" ]]; then
       copy_to_sprite "$sprite_id" "$file" "/var/local/rwloop/templates/$(basename "$file")" || {
         warn "Failed to copy template: $(basename "$file")"
@@ -368,11 +368,11 @@ run_iteration() {
   local context_file="/var/local/rwloop/session/context_prompt.md"
 
   # Copy prompts to sprite
-  copy_to_sprite "$sprite_id" "$RWLOOP_HOME/templates/iterate.md" "$prompt_file" || {
+  copy_to_sprite "$sprite_id" "$RWLOOP_DIR/templates/iterate.md" "$prompt_file" || {
     error "Failed to copy iterate prompt to sprite"
     return 1
   }
-  copy_to_sprite "$sprite_id" "$RWLOOP_HOME/templates/context.md" "$context_file" || {
+  copy_to_sprite "$sprite_id" "$RWLOOP_DIR/templates/context.md" "$context_file" || {
     error "Failed to copy context prompt to sprite"
     return 1
   }

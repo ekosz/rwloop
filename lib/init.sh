@@ -67,7 +67,7 @@ EOF
 generate_tasks() {
   local session_dir="$1"
   local prd_content
-  local template_path="$RWLOOP_HOME/templates/create-tasks.md"
+  local template_path="$RWLOOP_DIR/templates/create-tasks.md"
 
   prd_content=$(cat "$session_dir/prd.md")
 
