@@ -179,6 +179,40 @@ setup_claude_credentials() {
   success "Claude credentials copied to sprite"
 }
 
+# Run Claude to setup the sprite environment based on .rwloop/setup.md
+run_setup_claude() {
+  local sprite_id="$1"
+
+  local setup_prompt="You are setting up a development environment. Read the setup instructions in .rwloop/setup.md and execute them.
+
+Your goal is to ensure the environment is ready for development and testing. This may include:
+- Installing required runtimes/languages
+- Installing dependencies
+- Setting up databases
+- Running migrations
+- Any other setup tasks described
+
+Work through each requirement and verify it's complete before moving on. If something fails, try to fix it.
+
+When done, simply say 'Setup complete' - do not update any state files."
+
+  local cmd="cd $SPRITE_REPO_DIR && HOME=/var/local/rwloop claude -p \"$setup_prompt\" --dangerously-skip-permissions --max-turns 50"
+
+  set +e
+  sprite exec -s "$sprite_id" -- sh -c "$cmd" 2>&1 | while IFS= read -r line; do
+    # Show output
+    echo "  $line"
+  done
+  local exit_code=${PIPESTATUS[0]}
+  set -e
+
+  if [[ $exit_code -ne 0 ]]; then
+    warn "Setup Claude exited with code $exit_code"
+  else
+    success "Environment setup complete"
+  fi
+}
+
 # Copy a file to the sprite (with retry)
 copy_to_sprite() {
   local sprite_id="$1"
@@ -249,16 +283,13 @@ setup_sprite() {
   }
   success "Repository cloned"
 
-  # Run setup script if it exists in the repo
-  log "Checking for setup script..."
-  if sprite exec -s "$sprite_id" -- test -f "$SPRITE_REPO_DIR/.rwloop/setup.sh" 2>/dev/null; then
-    log "Running .rwloop/setup.sh..."
-    sprite exec -s "$sprite_id" -- sh -c "cd $SPRITE_REPO_DIR && chmod +x .rwloop/setup.sh && ./.rwloop/setup.sh" 2>&1 || {
-      warn "Setup script failed (continuing anyway)"
-    }
-    success "Setup script completed"
+  # Run setup via Claude if .rwloop/setup.md exists
+  log "Checking for setup instructions..."
+  if sprite exec -s "$sprite_id" -- test -f "$SPRITE_REPO_DIR/.rwloop/setup.md" 2>/dev/null; then
+    log "Running Claude to setup environment..."
+    run_setup_claude "$sprite_id"
   else
-    info "No .rwloop/setup.sh found, skipping"
+    info "No .rwloop/setup.md found, skipping setup"
   fi
 
   # Copy session files to Sprite
