@@ -72,12 +72,22 @@ Add a new entry:
 
 ## Rules
 
-1. **One task per iteration** - Focus on completing one task fully
+1. **ONE task per iteration then STOP** - Complete exactly one task, update state files, then EXIT
 2. **Verify before marking complete** - Run tests, check the code works
 3. **Commit after completing** - One commit per task
 4. **Always update state files** - This is how continuity works
 5. **Be honest about progress** - Don't mark tasks complete if they're not
 
+## CRITICAL: Exit After One Task
+
+After completing ONE task:
+1. Update tasks.json (set `passes: true` for the completed task)
+2. Write state.json with status "CONTINUE"
+3. Append to history.json
+4. **STOP IMMEDIATELY** - Do not start the next task!
+
+The loop controller will start a fresh iteration for the next task. This keeps context small and prevents drift.
+
 ## Start Now
 
-Read the state files and begin working on the next incomplete task.
+Read the state files, complete the next incomplete task, update state files, then exit.

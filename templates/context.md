@@ -70,8 +70,8 @@ Before starting work:
 ## Important Rules
 
 1. **Read state files first** - Always start by reading tasks.json, state.json, and history.json
-2. **Work on ONE task at a time** - Find the first incomplete task and focus on it
+2. **Complete ONE task then EXIT** - Do exactly one task per iteration, then stop
 3. **Commit after each task** - Don't batch multiple tasks into one commit
-4. **Update state files** - Always write updated tasks.json and state.json before finishing
+4. **Update state files before exiting** - Write tasks.json, state.json, and history.json
 5. **Be honest about status** - If stuck, set BLOCKED. If unsure, set NEEDS_INPUT.
-6. **Don't loop forever** - If you can't make progress, stop and ask for help
+6. **EXIT after updating state** - The loop controller handles starting the next iteration
