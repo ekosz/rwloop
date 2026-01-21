@@ -179,15 +179,32 @@ setup_claude_credentials() {
   success "Claude credentials copied to sprite"
 }
 
-# Copy a file to the sprite using base64 encoding
+# Copy a file to the sprite (with retry)
 copy_to_sprite() {
   local sprite_id="$1"
   local local_file="$2"
   local remote_path="$3"
+  local max_retries=3
+  local retry=0
 
-  local content
-  content=$(base64 < "$local_file")
-  sprite exec -s "$sprite_id" -- sh -c "echo '$content' | base64 -d > '$remote_path'"
+  # Read file and encode as base64 (single line, shell-safe)
+  local encoded
+  encoded=$(base64 -w 0 < "$local_file" 2>/dev/null || base64 < "$local_file" | tr -d '\n')
+
+  while [[ $retry -lt $max_retries ]]; do
+    if sprite exec -s "$sprite_id" -- sh -c "echo '$encoded' | base64 -d > '$remote_path'" 2>&1; then
+      return 0
+    fi
+
+    retry=$((retry + 1))
+    if [[ $retry -lt $max_retries ]]; then
+      warn "copy_to_sprite attempt $retry failed, retrying..."
+      sleep 2
+    fi
+  done
+
+  error "copy_to_sprite failed after $max_retries attempts for $local_file"
+  return 1
 }
 
 # Copy a file from the sprite
