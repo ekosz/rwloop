@@ -162,7 +162,7 @@ get_github_token() {
   return 1
 }
 
-# Get git remote URL (convert SSH to HTTPS with token)
+# Get git remote URL (convert any SSH format to HTTPS with token)
 get_clone_url() {
   local token="${1:-}"
   local remote
@@ -173,17 +173,35 @@ get_clone_url() {
     return 1
   fi
 
-  # Convert SSH to HTTPS if needed
-  if [[ "$remote" == git@github.com:* ]]; then
-    remote="https://github.com/${remote#git@github.com:}"
+  # Extract org/repo from various URL formats
+  local repo_path=""
+
+  if [[ "$remote" == git@*:* ]]; then
+    # SSH format: git@hostname:org/repo.git (handles custom hostnames like github_ek)
+    repo_path="${remote#*:}"
+  elif [[ "$remote" == ssh://* ]]; then
+    # SSH URL format: ssh://git@hostname/org/repo.git
+    repo_path="${remote#ssh://*/}"
+  elif [[ "$remote" == https://github.com/* ]]; then
+    # Already HTTPS github.com
+    repo_path="${remote#https://github.com/}"
+  elif [[ "$remote" == https://*github.com/* ]]; then
+    # HTTPS with token or other prefix
+    repo_path="${remote#*github.com/}"
+  else
+    error "Unrecognized remote format: $remote"
+    return 1
   fi
 
   # Remove .git suffix if present
-  remote="${remote%.git}"
+  repo_path="${repo_path%.git}"
+
+  # Build clean HTTPS URL
+  remote="https://github.com/${repo_path}"
 
   # Add token if provided
   if [[ -n "$token" ]]; then
-    remote="${remote/https:\/\//https://x-access-token:${token}@}"
+    remote="https://x-access-token:${token}@github.com/${repo_path}"
   fi
 
   echo "$remote"
