@@ -62,12 +62,6 @@ cmd_run() {
   info "Max iterations: $MAX_ITERATIONS"
   info "Max duration: ${MAX_DURATION_HOURS}h"
 
-  # Create Sprite
-  log "Creating Sprite VM..."
-  local sprite_name="rwloop-$(get_project_id)"
-  local sprite_id
-  local sprite_output
-
   # Check if sprite CLI exists
   if ! command -v sprite &>/dev/null; then
     error "'sprite' CLI not found in PATH"
@@ -77,31 +71,58 @@ cmd_run() {
     exit 1
   fi
 
-  info "Running: sprite create $sprite_name"
-  # Temporarily disable set -e to capture exit code
-  set +e
-  sprite_output=$(sprite create "$sprite_name" 2>&1)
-  local sprite_exit_code=$?
-  set -e
+  # Check for existing sprite or create new one
+  local sprite_name="rwloop-$(get_project_id)"
+  local sprite_id
+  local sprite_output
 
-  info "Exit code: $sprite_exit_code"
-  info "Output: '$sprite_output'"
+  # Check if sprite already exists
+  if sprite list 2>/dev/null | grep -q "$sprite_name"; then
+    log "Found existing Sprite: $sprite_name"
+    if confirm "Reuse existing sprite?" "y"; then
+      sprite_id="$sprite_name"
+      success "Using existing Sprite: $sprite_id"
+    else
+      log "Destroying existing Sprite..."
+      sprite destroy -s "$sprite_name" 2>/dev/null || true
+      sleep 2  # Give it a moment to clean up
 
-  if [[ $sprite_exit_code -ne 0 ]]; then
-    error "Failed to create Sprite"
-    if [[ -n "$sprite_output" ]]; then
-      echo "$sprite_output"
+      log "Creating new Sprite VM..."
+      set +e
+      sprite_output=$(sprite create "$sprite_name" 2>&1)
+      local sprite_exit_code=$?
+      set -e
+
+      if [[ $sprite_exit_code -ne 0 ]]; then
+        error "Failed to create Sprite"
+        echo "$sprite_output"
+        exit 1
+      fi
+      sprite_id="$sprite_name"
+      success "Sprite created: $sprite_id"
     fi
-    echo ""
-    echo "Troubleshooting:"
-    echo "  - Check sprite version: sprite --version"
-    echo "  - Check auth status: sprite auth status"
-    echo "  - List existing sprites: sprite list"
-    exit 1
-  fi
+  else
+    log "Creating Sprite VM..."
+    set +e
+    sprite_output=$(sprite create "$sprite_name" 2>&1)
+    local sprite_exit_code=$?
+    set -e
 
-  # Use the sprite name as the ID (not the command output which has extra text)
-  sprite_id="$sprite_name"
+    if [[ $sprite_exit_code -ne 0 ]]; then
+      error "Failed to create Sprite"
+      if [[ -n "$sprite_output" ]]; then
+        echo "$sprite_output"
+      fi
+      echo ""
+      echo "Troubleshooting:"
+      echo "  - Check sprite version: sprite --version"
+      echo "  - Check auth status: sprite auth status"
+      echo "  - List existing sprites: sprite list"
+      exit 1
+    fi
+    sprite_id="$sprite_name"
+    success "Sprite created: $sprite_id"
+  fi
 
   # Save sprite ID
   echo "$sprite_id" > "$session_dir/sprite_id"
