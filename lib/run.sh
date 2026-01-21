@@ -68,17 +68,35 @@ cmd_run() {
   local sprite_id
   local sprite_output
 
+  # Check if sprite CLI exists
+  if ! command -v sprite &>/dev/null; then
+    error "'sprite' CLI not found in PATH"
+    echo ""
+    echo "The sprite CLI is required to run VMs."
+    echo "See: https://github.com/anthropics/sprite"
+    exit 1
+  fi
+
+  info "Running: sprite create --name $sprite_name"
+  # Temporarily disable set -e to capture exit code
+  set +e
   sprite_output=$(sprite create --name "$sprite_name" 2>&1)
   local sprite_exit_code=$?
+  set -e
 
-  if [[ $sprite_exit_code -ne 0 ]]; then
-    error "Failed to create Sprite (exit code: $sprite_exit_code)"
-    error "Output: $sprite_output"
+  info "Exit code: $sprite_exit_code"
+  info "Output: '$sprite_output'"
+
+  if [[ $sprite_exit_code -ne 0 ]] || [[ -z "$sprite_output" ]]; then
+    error "Failed to create Sprite"
+    if [[ -n "$sprite_output" ]]; then
+      echo "$sprite_output"
+    fi
     echo ""
     echo "Troubleshooting:"
-    echo "  - Is the 'sprite' CLI installed? Run: sprite --version"
-    echo "  - Are you authenticated? Run: sprite auth login"
-    echo "  - Check sprite status: sprite list"
+    echo "  - Check sprite version: sprite --version"
+    echo "  - Check auth status: sprite auth status"
+    echo "  - List existing sprites: sprite list"
     exit 1
   fi
 
