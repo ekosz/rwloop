@@ -85,6 +85,9 @@ cmd_run() {
   # Sync session files to Sprite before starting
   sync_session_to_sprite "$session_dir" "$sprite_id"
 
+  # Refresh Claude credentials (may have expired since init)
+  setup_claude_credentials "$sprite_id"
+
   # Run the loop
   run_loop "$session_dir"
 }
@@ -319,7 +322,12 @@ run_loop() {
   local sprite_id
   sprite_id=$(cat "$session_dir/sprite_id")
 
-  local iteration=0
+  # Resume from last iteration (read from session config)
+  local config
+  config=$(read_session_config)
+  local iteration
+  iteration=$(echo "$config" | jq -r '.iteration // 0')
+
   local start_time
   start_time=$(date +%s)
   local max_seconds=$((MAX_DURATION_HOURS * 3600))
