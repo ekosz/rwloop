@@ -67,11 +67,49 @@ get_project_id() {
   echo -n "${remote}:${dir_path}:${branch}" | sha256sum | cut -c1-12
 }
 
-# Get current session directory
+# Get current session directory (or by ID if provided)
 get_session_dir() {
-  local project_id
-  project_id=$(get_project_id)
-  echo "$RWLOOP_HOME/sessions/$project_id"
+  local session_id="${1:-}"
+
+  if [[ -n "$session_id" ]]; then
+    echo "$RWLOOP_HOME/sessions/$session_id"
+  else
+    local project_id
+    project_id=$(get_project_id)
+    echo "$RWLOOP_HOME/sessions/$project_id"
+  fi
+}
+
+# List all sessions
+list_sessions() {
+  local sessions_dir="$RWLOOP_HOME/sessions"
+
+  if [[ ! -d "$sessions_dir" ]]; then
+    return
+  fi
+
+  for session_dir in "$sessions_dir"/*/; do
+    [[ -d "$session_dir" ]] || continue
+    local session_id
+    session_id=$(basename "$session_dir")
+
+    if [[ -f "$session_dir/session.json" ]]; then
+      local status repo branch created_at
+      status=$(jq -r '.status // "unknown"' "$session_dir/session.json" 2>/dev/null)
+      repo=$(jq -r '.repo // "unknown"' "$session_dir/session.json" 2>/dev/null)
+      branch=$(jq -r '.branch // "unknown"' "$session_dir/session.json" 2>/dev/null)
+      created_at=$(jq -r '.created_at // "unknown"' "$session_dir/session.json" 2>/dev/null)
+
+      # Get task progress
+      local total=0 completed=0
+      if [[ -f "$session_dir/tasks.json" ]]; then
+        total=$(jq 'length' "$session_dir/tasks.json" 2>/dev/null || echo 0)
+        completed=$(jq '[.[] | select(.passes == true)] | length' "$session_dir/tasks.json" 2>/dev/null || echo 0)
+      fi
+
+      echo "$session_id|$repo|$branch|$status|$completed/$total|$created_at"
+    fi
+  done
 }
 
 # Ensure session exists

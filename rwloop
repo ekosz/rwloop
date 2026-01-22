@@ -32,6 +32,7 @@ COMMANDS:
     tasks               Edit the task list for current session
     run [--refresh]     Start the loop on a Sprite VM
     status              Check status of running session
+    sessions            List all sessions
     resume              Resume a paused session
     respond "<msg>"     Respond to a NEEDS_INPUT prompt
     done                Complete session and create PR
@@ -42,6 +43,7 @@ OPTIONS:
     -v, --version       Show version
     --refresh           Re-analyze codebase and update tasks (preserves completed)
     --branch <name>     Branch to work on (default: current branch)
+    --session <id>      Target a specific session (for status, tasks, stop)
 
 ENVIRONMENT:
     GITHUB_TOKEN        GitHub token for cloning private repos
@@ -56,6 +58,11 @@ EXAMPLES:
     rwloop run --refresh                 # Refresh plan then run
     rwloop respond "Use JWT tokens, not sessions"
     rwloop done
+
+    # Multi-session management
+    rwloop sessions                      # List all sessions
+    rwloop status --session abc123       # Check specific session
+    rwloop stop --session abc123         # Stop specific session
 
 EOF
 }
@@ -90,6 +97,10 @@ main() {
     status)
       source "$RWLOOP_DIR/lib/run.sh"
       cmd_status "$@"
+      ;;
+    sessions)
+      source "$RWLOOP_DIR/lib/init.sh"
+      cmd_sessions "$@"
       ;;
     resume)
       source "$RWLOOP_DIR/lib/run.sh"

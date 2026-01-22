@@ -67,6 +67,7 @@ export PATH="$PATH:$(pwd)/rwloop"
 | `rwloop tasks` | View/edit the task list |
 | `rwloop run [--branch name] [--refresh]` | Start loop on Sprite VM |
 | `rwloop status` | Check session status |
+| `rwloop sessions` | List all sessions |
 | `rwloop resume` | Resume a paused session |
 | `rwloop respond "msg"` | Respond to NEEDS_INPUT |
 | `rwloop done` | Complete session, create PR |
@@ -76,6 +77,26 @@ export PATH="$PATH:$(pwd)/rwloop"
 
 - `--refresh` - Re-analyze codebase and regenerate/update tasks (preserves completed tasks)
 - `--branch <name>` - Specify branch to work on (default: current branch)
+- `--session <id>` - Target a specific session instead of current (works with `status`, `tasks`, `stop`)
+
+### Multi-Session Support
+
+Sessions are scoped by repo + directory + branch, so you can run parallel sessions on different branches:
+
+```bash
+# List all sessions
+rwloop sessions
+
+# Output:
+# ID             REPO                           BRANCH               STATUS       TASKS      CREATED
+# ------------------------------------------------------------------------------------------------------------------------
+# * a1b2c3d4e5f6 ekosz/myapp                    feature/auth         running      3/10       2024-01-15
+#   x9y8z7w6v5u4 ekosz/myapp                    feature/payments     stopped      5/8        2024-01-14
+
+# Check or stop a specific session
+rwloop status --session x9y8z7w6v5u4
+rwloop stop --session x9y8z7w6v5u4
+```
 
 ## Project Setup
 

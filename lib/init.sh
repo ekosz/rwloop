@@ -387,11 +387,72 @@ NOTE: This is a --refresh operation. Read existing tasks.json and preserve compl
   success "Planning complete"
 }
 
+cmd_sessions() {
+  local sessions_dir="$RWLOOP_HOME/sessions"
+
+  if [[ ! -d "$sessions_dir" ]] || [[ -z "$(ls -A "$sessions_dir" 2>/dev/null)" ]]; then
+    info "No sessions found"
+    exit 0
+  fi
+
+  # Get current session ID for highlighting
+  local current_id
+  current_id=$(get_project_id)
+
+  # Print header
+  printf "${BOLD}%-14s %-30s %-20s %-12s %-10s %s${NC}\n" "ID" "REPO" "BRANCH" "STATUS" "TASKS" "CREATED"
+  printf "%s\n" "$(printf '%.0s-' {1..120})"
+
+  # List sessions
+  while IFS='|' read -r id repo branch status tasks created; do
+    [[ -z "$id" ]] && continue
+
+    # Format created date (just date part)
+    local created_short
+    created_short=$(echo "$created" | cut -d'T' -f1)
+
+    # Highlight current session
+    local prefix=""
+    if [[ "$id" == "$current_id" ]]; then
+      prefix="${GREEN}* "
+      printf "${GREEN}%-14s %-30s %-20s %-12s %-10s %s${NC}\n" "$id" "$repo" "$branch" "$status" "$tasks" "$created_short"
+    else
+      printf "%-14s %-30s %-20s %-12s %-10s %s\n" "$id" "$repo" "$branch" "$status" "$tasks" "$created_short"
+    fi
+  done < <(list_sessions)
+
+  echo ""
+  info "* = current session (based on directory and branch)"
+}
+
 cmd_tasks() {
-  require_session
+  local session_id=""
+
+  # Parse arguments
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --session)
+        session_id="$2"
+        shift 2
+        ;;
+      *)
+        error "Unknown option: $1"
+        exit 1
+        ;;
+    esac
+  done
 
   local session_dir
-  session_dir=$(get_session_dir)
+  session_dir=$(get_session_dir "$session_id")
+
+  if [[ ! -d "$session_dir" ]]; then
+    if [[ -n "$session_id" ]]; then
+      error "Session not found: $session_id"
+    else
+      error "No session found. Run 'rwloop init <prd.md>' first."
+    fi
+    exit 1
+  fi
   local tasks_file="$session_dir/tasks.json"
 
   if [[ ! -f "$tasks_file" ]]; then
