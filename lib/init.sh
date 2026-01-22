@@ -349,12 +349,16 @@ When done, simply say 'Setup complete' - do not update any state files."
 
   local cmd="cd $SPRITE_REPO_DIR && HOME=/var/local/rwloop claude -p \"$setup_prompt\" --dangerously-skip-permissions --max-turns 50"
 
+  echo ""
+
+  # Run with unbuffered output for real-time streaming
+  # The -t flag allocates a pseudo-TTY which helps with streaming
   set +e
-  sprite exec -s "$sprite_id" -- sh -c "$cmd" 2>&1 | while IFS= read -r line; do
-    echo "  $line"
-  done
-  local exit_code=${PIPESTATUS[0]}
+  sprite exec -s "$sprite_id" -t -- sh -c "$cmd"
+  local exit_code=$?
   set -e
+
+  echo ""
 
   if [[ $exit_code -ne 0 ]]; then
     warn "Setup Claude exited with code $exit_code"
