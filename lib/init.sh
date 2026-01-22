@@ -120,6 +120,12 @@ generate_tasks() {
   local prd_content
   local template_path="$RWLOOP_DIR/templates/create-tasks.md"
 
+  # Verify template exists
+  if [[ ! -f "$template_path" ]]; then
+    error "Template not found: $template_path"
+    exit 1
+  fi
+
   prd_content=$(cat "$session_dir/prd.md")
 
   # Build prompt with PRD content
@@ -137,22 +143,33 @@ $prd_content"
   local output_file
   output_file=$(mktemp)
 
+  # Run claude and capture exit code properly
+  set +e  # Temporarily disable exit on error
   claude -p "$prompt" --output-format text > "$output_file" 2>&1 &
   local claude_pid=$!
 
   spinner $claude_pid "Generating tasks with Claude..."
 
-  # Check if Claude succeeded
   wait $claude_pid
   local exit_code=$?
+  set -e  # Re-enable exit on error
 
   local output
-  output=$(cat "$output_file")
+  output=$(cat "$output_file" 2>/dev/null || echo "")
   rm -f "$output_file"
 
+  # Check for empty output
+  if [[ -z "$output" ]]; then
+    error "Claude returned empty output"
+    error "This usually means Claude CLI failed to start or authenticate"
+    echo ""
+    echo "Try running manually: claude -p 'hello'"
+    exit 1
+  fi
+
   if [[ $exit_code -ne 0 ]]; then
-    error "Claude failed to generate tasks"
-    echo "$output"
+    error "Claude failed to generate tasks (exit code: $exit_code)"
+    echo "$output" | head -50
     exit 1
   fi
 
@@ -224,14 +241,30 @@ cmd_plan() {
     esac
   done
 
-  require_session
   check_dependencies
 
   local session_dir
   session_dir=$(get_session_dir)
 
+  # Check if session exists and has required files
+  if [[ ! -d "$session_dir" ]]; then
+    error "No session found. Run 'rwloop init <prd.md>' first."
+    exit 1
+  fi
+
   if [[ ! -f "$session_dir/prd.md" ]]; then
-    error "No PRD found. Run 'rwloop init <prd.md>' first."
+    error "Session exists but PRD is missing."
+    error "The previous 'rwloop init' may have failed."
+    echo ""
+    echo "Try running 'rwloop init <prd.md>' again."
+    exit 1
+  fi
+
+  if [[ ! -f "$session_dir/session.json" ]]; then
+    error "Session exists but session.json is missing."
+    error "The previous 'rwloop init' may have failed."
+    echo ""
+    echo "Try running 'rwloop init <prd.md>' again."
     exit 1
   fi
 
@@ -271,6 +304,16 @@ run_planning() {
   local template_path="$RWLOOP_DIR/templates/plan.md"
   local context_path="$RWLOOP_DIR/templates/context.md"
 
+  # Verify templates exist
+  if [[ ! -f "$template_path" ]]; then
+    error "Template not found: $template_path"
+    exit 1
+  fi
+  if [[ ! -f "$context_path" ]]; then
+    error "Template not found: $context_path"
+    exit 1
+  fi
+
   # Build the prompt
   local prompt
   prompt=$(cat "$template_path")
@@ -289,6 +332,8 @@ NOTE: This is a --refresh operation. Read existing tasks.json and preserve compl
   local output_file
   output_file=$(mktemp)
 
+  # Run claude and capture exit code properly
+  set +e  # Temporarily disable exit on error
   claude -p "$prompt" \
     --append-system-prompt "$(cat "$context_path")" \
     --dangerously-skip-permissions \
@@ -300,21 +345,32 @@ NOTE: This is a --refresh operation. Read existing tasks.json and preserve compl
 
   wait $claude_pid
   local exit_code=$?
+  set -e  # Re-enable exit on error
 
   local output
-  output=$(cat "$output_file")
+  output=$(cat "$output_file" 2>/dev/null || echo "")
   rm -f "$output_file"
 
+  # Check for empty output
+  if [[ -z "$output" ]]; then
+    error "Claude returned empty output"
+    error "This usually means Claude CLI failed to start or authenticate"
+    echo ""
+    echo "Try running manually: claude -p 'hello'"
+    exit 1
+  fi
+
   if [[ $exit_code -ne 0 ]]; then
-    error "Claude planning failed"
-    echo "$output"
+    error "Claude planning failed (exit code: $exit_code)"
+    echo "$output" | head -50
     exit 1
   fi
 
   # Verify tasks.json was created/updated
   if [[ ! -f "$session_dir/tasks.json" ]]; then
     error "Planning did not generate tasks.json"
-    echo "Claude output:"
+    echo ""
+    echo "Claude output (first 50 lines):"
     echo "$output" | head -50
     exit 1
   fi
@@ -322,6 +378,9 @@ NOTE: This is a --refresh operation. Read existing tasks.json and preserve compl
   # Validate JSON
   if ! jq . "$session_dir/tasks.json" &>/dev/null; then
     error "Invalid tasks.json generated"
+    echo ""
+    echo "Contents of tasks.json:"
+    cat "$session_dir/tasks.json" | head -20
     exit 1
   fi
 
