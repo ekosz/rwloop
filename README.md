@@ -10,8 +10,11 @@ Implements the "Ralph Wiggum" pattern: stateless agent with stateful controller,
 # 1. Initialize with a PRD
 rwloop init ./docs/my-feature.md
 
-# 2. (Optional) Run planning phase to analyze codebase
+# 2. Interactive planning session with Claude
 rwloop plan
+# - Claude reads PRD, explores codebase
+# - You discuss architecture, share constraints
+# - When ready, say "generate tasks"
 
 # 3. Review/edit generated tasks
 rwloop tasks
@@ -28,16 +31,28 @@ rwloop resume
 rwloop done
 ```
 
+### Interactive Planning
+
+The `plan` command starts a conversation with Claude:
+
+```
+$ rwloop plan
+[rwloop] Starting interactive planning session...
+[info] This is a conversation with Claude to plan the implementation.
+[info] Discuss architecture, share your thoughts, ask questions.
+[info] When ready, ask Claude to 'generate the tasks' and it will write tasks.json
+
+> (Claude analyzes codebase and PRD, then asks questions)
+> (You discuss approach, share preferences)
+> (When ready: "looks good, generate tasks")
+```
+
 ### Refreshing the Plan
 
-If tasks become stale during implementation, refresh while preserving completed work:
+If tasks become stale during implementation:
 
 ```bash
-# Re-analyze codebase and update incomplete tasks
-rwloop plan --refresh
-
-# Or refresh and immediately run
-rwloop run --refresh
+rwloop plan --refresh   # Preserves completed tasks, re-evaluates incomplete
 ```
 
 ## Installation
@@ -117,8 +132,8 @@ This runs automatically after cloning when you `rwloop run`.
 
 ## How It Works
 
-1. **Init**: Claude reads your PRD and generates a task list (`tasks.json`)
-2. **Plan** (optional): Gap analysis between PRD and existing codebase
+1. **Init**: Sets up session with your PRD
+2. **Plan**: Interactive conversation with Claude to discuss architecture and generate tasks
 3. **Run**: Creates a Sprite VM, clones your repo, runs setup, starts the loop
 4. **Loop**: Each iteration, Claude:
    - Reads state files (PRD, tasks, history, previous state)

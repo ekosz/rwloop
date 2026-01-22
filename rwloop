@@ -28,7 +28,7 @@ USAGE:
 
 COMMANDS:
     init <prd.md>       Initialize a session from a PRD file
-    plan [--refresh]    Run planning phase (analyze codebase, generate tasks)
+    plan [--refresh]    Interactive planning session with Claude
     tasks               Edit the task list for current session
     run [--refresh]     Start the loop on a Sprite VM
     status              Check status of running session

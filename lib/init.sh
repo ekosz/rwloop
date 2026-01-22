@@ -99,20 +99,24 @@ cmd_init() {
 }
 EOF
 
-  # Generate tasks using Claude
-  log "Generating tasks from PRD..."
-  generate_tasks "$session_dir"
+  # Initialize empty state
+  cat > "$session_dir/state.json" <<EOF
+{
+  "status": "READY",
+  "summary": "Session initialized, awaiting planning",
+  "iteration": 0,
+  "question": null,
+  "error": null
+}
+EOF
 
-  # Let user edit tasks
-  if confirm "Edit tasks before continuing?" "y"; then
-    cmd_tasks
-  fi
+  # Initialize empty history
+  echo "[]" > "$session_dir/history.json"
 
   success "Session initialized at: $session_dir"
   echo ""
-  echo "Next steps:"
-  echo "  1. Review tasks:  rwloop tasks"
-  echo "  2. Start loop:    rwloop run"
+  echo "Next step:"
+  echo "  rwloop plan    # Interactive planning session with Claude"
 }
 
 generate_tasks() {
@@ -268,37 +272,51 @@ cmd_plan() {
     exit 1
   fi
 
-  log "Running planning phase..."
+  log "Starting interactive planning session..."
+  echo ""
+  info "This is a conversation with Claude to plan the implementation."
+  info "Discuss architecture, share your thoughts, ask questions."
+  info "When ready, ask Claude to 'generate the tasks' and it will write tasks.json"
+  echo ""
+
   if [[ "$refresh" == "true" ]]; then
-    info "Refresh mode: preserving completed tasks"
+    info "Refresh mode: existing completed tasks will be preserved"
+    echo ""
   fi
 
-  # Run planning with Claude locally (analyzes codebase against PRD)
-  run_planning "$session_dir" "$refresh"
+  # Build system prompt
+  local system_prompt
+  system_prompt=$(build_plan_system_prompt "$session_dir" "$refresh")
 
-  # Show results
+  # Run Claude interactively
+  claude \
+    --system-prompt "$system_prompt" \
+    --dangerously-skip-permissions
+
+  # Check if tasks were generated
   if [[ -f "$session_dir/tasks.json" ]]; then
     local task_count
-    task_count=$(jq 'length' "$session_dir/tasks.json")
-    local complete_count
-    complete_count=$(jq '[.[] | select(.passes == true)] | length' "$session_dir/tasks.json")
-    success "Plan complete: $task_count tasks ($complete_count completed)"
-  fi
-
-  # Show summary if generated
-  if [[ -f "$session_dir/plan_summary.md" ]]; then
+    task_count=$(jq 'length' "$session_dir/tasks.json" 2>/dev/null || echo 0)
+    if [[ $task_count -gt 0 ]]; then
+      local complete_count
+      complete_count=$(jq '[.[] | select(.passes == true)] | length' "$session_dir/tasks.json")
+      echo ""
+      success "Planning complete: $task_count tasks"
+      echo ""
+      echo "Next steps:"
+      echo "  rwloop tasks        # Review/edit tasks"
+      echo "  rwloop run          # Start the loop"
+    else
+      echo ""
+      warn "No tasks in tasks.json. Run 'rwloop plan' again to continue."
+    fi
+  else
     echo ""
-    log "Plan Summary:"
-    cat "$session_dir/plan_summary.md"
+    info "No tasks generated yet. Run 'rwloop plan' again to continue planning."
   fi
-
-  echo ""
-  echo "Next steps:"
-  echo "  rwloop tasks        # Review/edit tasks"
-  echo "  rwloop run          # Start the loop"
 }
 
-run_planning() {
+build_plan_system_prompt() {
   local session_dir="$1"
   local refresh="$2"
   local template_path="$RWLOOP_DIR/templates/plan.md"
@@ -314,77 +332,43 @@ run_planning() {
     exit 1
   fi
 
-  # Build the prompt
+  # Build composite system prompt
   local prompt
-  prompt=$(cat "$template_path")
+  prompt="$(cat "$template_path")
 
-  if [[ "$refresh" == "true" ]]; then
+---
+
+$(cat "$context_path")
+
+---
+
+# PRD (Product Requirements Document)
+
+The session directory is: $session_dir
+Write tasks to: $session_dir/tasks.json
+
+Here is the PRD:
+
+$(cat "$session_dir/prd.md")"
+
+  # Add existing tasks if refresh mode
+  if [[ "$refresh" == "true" ]] && [[ -f "$session_dir/tasks.json" ]]; then
     prompt="$prompt
 
 ---
 
-NOTE: This is a --refresh operation. Read existing tasks.json and preserve completed tasks (passes: true). Re-evaluate and update incomplete tasks based on current codebase state."
+# Existing Tasks (--refresh mode)
+
+This is a refresh operation. Preserve completed tasks (passes: true).
+Re-evaluate incomplete tasks based on current codebase state.
+
+Current tasks.json:
+\`\`\`json
+$(cat "$session_dir/tasks.json")
+\`\`\`"
   fi
 
-  log "Running Claude for planning..."
-
-  # Run Claude with planning prompt
-  local output_file
-  output_file=$(mktemp)
-
-  # Run claude and capture exit code properly
-  set +e  # Temporarily disable exit on error
-  claude -p "$prompt" \
-    --append-system-prompt "$(cat "$context_path")" \
-    --dangerously-skip-permissions \
-    --max-turns 50 \
-    --output-format text > "$output_file" 2>&1 &
-  local claude_pid=$!
-
-  spinner $claude_pid "Analyzing codebase and generating plan..."
-
-  wait $claude_pid
-  local exit_code=$?
-  set -e  # Re-enable exit on error
-
-  local output
-  output=$(cat "$output_file" 2>/dev/null || echo "")
-  rm -f "$output_file"
-
-  # Check for empty output
-  if [[ -z "$output" ]]; then
-    error "Claude returned empty output"
-    error "This usually means Claude CLI failed to start or authenticate"
-    echo ""
-    echo "Try running manually: claude -p 'hello'"
-    exit 1
-  fi
-
-  if [[ $exit_code -ne 0 ]]; then
-    error "Claude planning failed (exit code: $exit_code)"
-    echo "$output" | head -50
-    exit 1
-  fi
-
-  # Verify tasks.json was created/updated
-  if [[ ! -f "$session_dir/tasks.json" ]]; then
-    error "Planning did not generate tasks.json"
-    echo ""
-    echo "Claude output (first 50 lines):"
-    echo "$output" | head -50
-    exit 1
-  fi
-
-  # Validate JSON
-  if ! jq . "$session_dir/tasks.json" &>/dev/null; then
-    error "Invalid tasks.json generated"
-    echo ""
-    echo "Contents of tasks.json:"
-    cat "$session_dir/tasks.json" | head -20
-    exit 1
-  fi
-
-  success "Planning complete"
+  echo "$prompt"
 }
 
 cmd_sessions() {
