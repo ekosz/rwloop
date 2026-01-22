@@ -198,7 +198,7 @@ GITHUB_TOKEN           # For cloning private repos (or use 'gh auth login')
 RWLOOP_HOME            # Config dir (default: ~/.rwloop)
 RWLOOP_MAX_ITERATIONS  # Default: 50
 RWLOOP_MAX_DURATION    # Hours, default: 4
-RWLOOP_STUCK_THRESHOLD # Iterations without progress before pausing, default: 10
+RWLOOP_STUCK_THRESHOLD # Iterations without progress before pausing, default: 3
 ```
 
 ## Status Values
