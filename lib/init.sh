@@ -319,13 +319,17 @@ setup_claude_credentials() {
     return 1
   fi
 
-  # Create .claude directory on sprite and write credentials
+  # Create .claude directories on sprite (Claude may look in different places)
   sprite exec -s "$sprite_id" -- mkdir -p /var/local/rwloop/.claude
+  sprite exec -s "$sprite_id" -- mkdir -p /var/local/rwloop/.config/claude
 
   # Write credentials via base64 to avoid quoting issues
   local encoded
   encoded=$(echo "$credentials" | base64)
+
+  # Write to both possible locations
   sprite exec -s "$sprite_id" -- sh -c "echo '$encoded' | base64 -d > /var/local/rwloop/.claude/.credentials.json"
+  sprite exec -s "$sprite_id" -- sh -c "echo '$encoded' | base64 -d > /var/local/rwloop/.config/claude/.credentials.json"
 
   success "Claude credentials copied to Sprite"
 }
@@ -347,7 +351,7 @@ Work through each requirement and verify it's complete before moving on. If some
 
 When done, simply say 'Setup complete' - do not update any state files."
 
-  local cmd="cd $SPRITE_REPO_DIR && HOME=/var/local/rwloop claude -p \"$setup_prompt\" --dangerously-skip-permissions --max-turns 50"
+  local cmd="cd $SPRITE_REPO_DIR && HOME=/var/local/rwloop XDG_CONFIG_HOME=/var/local/rwloop/.config claude -p \"$setup_prompt\" --dangerously-skip-permissions --max-turns 50"
 
   echo ""
 
@@ -465,7 +469,7 @@ cmd_plan() {
   log "Connecting to Sprite for planning session..."
   echo ""
 
-  local claude_cmd="cd $SPRITE_REPO_DIR && HOME=/var/local/rwloop claude --system-prompt \"\$(cat /tmp/plan_system_prompt.txt)\" --dangerously-skip-permissions"
+  local claude_cmd="cd $SPRITE_REPO_DIR && HOME=/var/local/rwloop XDG_CONFIG_HOME=/var/local/rwloop/.config claude --system-prompt \"\$(cat /tmp/plan_system_prompt.txt)\" --dangerously-skip-permissions"
 
   sprite exec -s "$sprite_id" -tty -- sh -c "$claude_cmd"
 
