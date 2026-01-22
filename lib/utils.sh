@@ -52,17 +52,19 @@ notify() {
   fi
 }
 
-# Get project identifier (hash of git remote + current dir)
+# Get project identifier (hash of git remote + current dir + branch)
 get_project_id() {
   local remote=""
   local dir_path=""
+  local branch=""
 
   if git rev-parse --is-inside-work-tree &>/dev/null; then
     remote=$(git remote get-url origin 2>/dev/null || echo "")
+    branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
   fi
   dir_path=$(pwd)
 
-  echo -n "${remote}:${dir_path}" | sha256sum | cut -c1-12
+  echo -n "${remote}:${dir_path}:${branch}" | sha256sum | cut -c1-12
 }
 
 # Get current session directory
