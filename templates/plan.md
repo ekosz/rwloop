@@ -52,6 +52,8 @@ Keep it conversational. Don't dump everything at once.
 
 When the developer indicates they're ready to generate tasks, write them to the tasks.json file.
 
+**IMPORTANT: After writing tasks.json, tell the user the tasks are saved and then type `/exit` to end the session.** Don't wait for further input - the planning phase is complete.
+
 ### Task Format
 
 Write to the session's tasks.json file:

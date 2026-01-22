@@ -472,10 +472,19 @@ cmd_plan() {
 
   local claude_cmd="cd $SPRITE_REPO_DIR && HOME=/var/local/rwloop XDG_CONFIG_HOME=/var/local/rwloop/.config claude --system-prompt \"\$(cat /tmp/plan_system_prompt.txt)\" --dangerously-skip-permissions"
 
+  set +e
   sprite exec -s "$sprite_id" -tty -- sh -c "$claude_cmd"
+  local exit_code=$?
+  set -e
 
   echo ""
-  log "Planning session ended. Syncing results..."
+
+  # Exit codes 130 (Ctrl-C) and 255 (ssh/tty interrupt) are normal for interactive sessions
+  if [[ $exit_code -ne 0 && $exit_code -ne 130 && $exit_code -ne 255 ]]; then
+    warn "Planning session exited with code $exit_code"
+  fi
+
+  log "Syncing results..."
 
   # Sync tasks.json back from sprite
   if sprite exec -s "$sprite_id" -- test -f "$SPRITE_SESSION_DIR/tasks.json" 2>/dev/null; then
