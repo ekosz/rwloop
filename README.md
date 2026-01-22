@@ -7,20 +7,23 @@ Implements the "Ralph Wiggum" pattern: stateless agent with stateful controller,
 ## Quick Start
 
 ```bash
-# 1. Initialize with a PRD
+# 1. Initialize session and create Sprite VM
 rwloop init ./docs/my-feature.md
+# - Creates Sprite VM
+# - Clones repo, installs dependencies
+# - Runs .rwloop/setup.md if present
 
-# 2. Interactive planning session with Claude
+# 2. Interactive planning session (runs inside Sprite)
 rwloop plan
-# - Claude reads PRD, explores codebase
+# - Claude reads PRD, explores codebase (safely sandboxed)
 # - You discuss architecture, share constraints
 # - When ready, say "generate tasks"
 
 # 3. Review/edit generated tasks
 rwloop tasks
 
-# 4. Start the loop on a Sprite VM
-rwloop run --branch feature/my-feature
+# 4. Start the autonomous loop
+rwloop run
 
 # 5. Press Ctrl+C to pause (or let it run to completion)
 
@@ -33,19 +36,22 @@ rwloop done
 
 ### Interactive Planning
 
-The `plan` command starts a conversation with Claude:
+The `plan` command starts an interactive conversation with Claude running inside the Sprite VM:
 
 ```
 $ rwloop plan
 [rwloop] Starting interactive planning session...
 [info] This is a conversation with Claude to plan the implementation.
+[info] Claude is running inside the Sprite VM (sandboxed).
 [info] Discuss architecture, share your thoughts, ask questions.
-[info] When ready, ask Claude to 'generate the tasks' and it will write tasks.json
+[info] When ready, ask Claude to 'generate the tasks'.
 
 > (Claude analyzes codebase and PRD, then asks questions)
 > (You discuss approach, share preferences)
 > (When ready: "looks good, generate tasks")
 ```
+
+All Claude operations happen inside the Sprite VM, keeping your host machine safe.
 
 ### Refreshing the Plan
 
@@ -77,10 +83,10 @@ export PATH="$PATH:$(pwd)/rwloop"
 
 | Command | Description |
 |---------|-------------|
-| `rwloop init <prd.md>` | Initialize session from PRD, generate tasks |
-| `rwloop plan [--refresh]` | Run planning phase (analyze codebase vs PRD) |
+| `rwloop init <prd.md>` | Create Sprite VM, clone repo, run setup |
+| `rwloop plan [--refresh]` | Interactive planning session (inside Sprite) |
 | `rwloop tasks` | View/edit the task list |
-| `rwloop run [--branch name] [--refresh]` | Start loop on Sprite VM |
+| `rwloop run [--refresh]` | Start the autonomous loop |
 | `rwloop status` | Check session status |
 | `rwloop sessions` | List all sessions |
 | `rwloop resume` | Resume a paused session |
@@ -91,7 +97,6 @@ export PATH="$PATH:$(pwd)/rwloop"
 ### Flags
 
 - `--refresh` - Re-analyze codebase and regenerate/update tasks (preserves completed tasks)
-- `--branch <name>` - Specify branch to work on (default: current branch)
 - `--session <id>` - Target a specific session instead of current (works with `status`, `tasks`, `stop`)
 
 ### Multi-Session Support
@@ -132,9 +137,9 @@ This runs automatically after cloning when you `rwloop run`.
 
 ## How It Works
 
-1. **Init**: Sets up session with your PRD
-2. **Plan**: Interactive conversation with Claude to discuss architecture and generate tasks
-3. **Run**: Creates a Sprite VM, clones your repo, runs setup, starts the loop
+1. **Init**: Creates Sprite VM, clones repo, runs setup (.rwloop/setup.md)
+2. **Plan**: Interactive conversation with Claude (inside Sprite) to discuss architecture and generate tasks
+3. **Run**: Starts the autonomous loop on the existing Sprite
 4. **Loop**: Each iteration, Claude:
    - Reads state files (PRD, tasks, history, previous state)
    - Finds next incomplete task

@@ -27,10 +27,10 @@ USAGE:
     rwloop <command> [options]
 
 COMMANDS:
-    init <prd.md>       Initialize a session from a PRD file
-    plan [--refresh]    Interactive planning session with Claude
+    init <prd.md>       Create Sprite VM, clone repo, run setup
+    plan [--refresh]    Interactive planning session (inside Sprite)
     tasks               Edit the task list for current session
-    run [--refresh]     Start the loop on a Sprite VM
+    run [--refresh]     Start the autonomous loop
     status              Check status of running session
     sessions            List all sessions
     resume              Resume a paused session
@@ -42,7 +42,6 @@ OPTIONS:
     -h, --help          Show this help message
     -v, --version       Show version
     --refresh           Re-analyze codebase and update tasks (preserves completed)
-    --branch <name>     Branch to work on (default: current branch)
     --session <id>      Target a specific session (for status, tasks, stop)
 
 ENVIRONMENT:
@@ -50,14 +49,14 @@ ENVIRONMENT:
     RWLOOP_HOME         Config directory (default: ~/.rwloop)
 
 EXAMPLES:
-    rwloop init ./docs/feature-prd.md
-    rwloop plan                          # Initial planning
-    rwloop plan --refresh                # Update plan after changes
-    rwloop tasks
-    rwloop run --branch feature/new-auth
+    rwloop init ./docs/feature-prd.md    # Create Sprite, clone repo, setup
+    rwloop plan                          # Interactive planning session
+    rwloop plan --refresh                # Update plan (preserve completed)
+    rwloop tasks                         # Review/edit tasks
+    rwloop run                           # Start autonomous loop
     rwloop run --refresh                 # Refresh plan then run
-    rwloop respond "Use JWT tokens, not sessions"
-    rwloop done
+    rwloop respond "Use JWT tokens"      # Answer a NEEDS_INPUT prompt
+    rwloop done                          # Create PR, cleanup
 
     # Multi-session management
     rwloop sessions                      # List all sessions

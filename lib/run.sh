@@ -14,21 +14,11 @@ cmd_run() {
   require_session
   check_dependencies
 
-  local branch=""
-  local token=""
   local refresh=false
 
   # Parse arguments
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      --branch)
-        branch="$2"
-        shift 2
-        ;;
-      --token)
-        token="$2"
-        shift 2
-        ;;
       --refresh)
         refresh=true
         shift
@@ -40,6 +30,39 @@ cmd_run() {
     esac
   done
 
+  local session_dir
+  session_dir=$(get_session_dir)
+
+  # Check if sprite exists (created by init)
+  if [[ ! -f "$session_dir/sprite_id" ]]; then
+    error "No Sprite found. Run 'rwloop init <prd.md>' first."
+    exit 1
+  fi
+
+  local sprite_id
+  sprite_id=$(cat "$session_dir/sprite_id")
+
+  # Verify sprite is running
+  if ! sprite list 2>/dev/null | grep -q "$sprite_id"; then
+    error "Sprite '$sprite_id' not found. It may have been destroyed."
+    echo ""
+    echo "Run 'rwloop init <prd.md>' to create a new session."
+    exit 1
+  fi
+
+  # Check if tasks exist
+  if [[ ! -f "$session_dir/tasks.json" ]]; then
+    error "No tasks found. Run 'rwloop plan' first to generate tasks."
+    exit 1
+  fi
+
+  local task_count
+  task_count=$(jq 'length' "$session_dir/tasks.json" 2>/dev/null || echo 0)
+  if [[ $task_count -eq 0 ]]; then
+    error "No tasks in tasks.json. Run 'rwloop plan' to generate tasks."
+    exit 1
+  fi
+
   # Run planning refresh if requested
   if [[ "$refresh" == "true" ]]; then
     log "Running plan refresh before starting loop..."
@@ -47,107 +70,69 @@ cmd_run() {
     cmd_plan --refresh
   fi
 
-  local session_dir
-  session_dir=$(get_session_dir)
-
-  # Get GitHub token
-  if [[ -z "$token" ]]; then
-    token=$(get_github_token) || {
-      warn "No GitHub token found. Private repos won't be accessible."
-      warn "Set GITHUB_TOKEN or run 'gh auth login'"
-    }
-  fi
-
-  # Get branch name
-  if [[ -z "$branch" ]]; then
-    branch=$(get_current_branch)
-  fi
-
   # Update session config
   local config
   config=$(read_session_config)
-  config=$(echo "$config" | jq --arg b "$branch" '.branch = $b | .status = "running" | .started_at = now | .iteration = 0')
+  config=$(echo "$config" | jq '.status = "running" | .started_at = now')
   write_session_config "$config"
 
   log "Starting Ralph Wiggum loop"
-  info "Branch: $branch"
+  info "Sprite: $sprite_id"
+  info "Tasks: $task_count"
   info "Max iterations: $MAX_ITERATIONS"
   info "Max duration: ${MAX_DURATION_HOURS}h"
 
-  # Check if sprite CLI exists
-  if ! command -v sprite &>/dev/null; then
-    error "'sprite' CLI not found in PATH"
-    echo ""
-    echo "The sprite CLI is required to run VMs."
-    echo "See: https://github.com/anthropics/sprite"
-    exit 1
-  fi
-
-  # Check for existing sprite or create new one
-  local sprite_name="rwloop-$(get_project_id)"
-  local sprite_id
-  local sprite_output
-
-  # Check if sprite already exists
-  if sprite list 2>/dev/null | grep -q "$sprite_name"; then
-    log "Found existing Sprite: $sprite_name"
-    if confirm "Reuse existing sprite?" "y"; then
-      sprite_id="$sprite_name"
-      success "Using existing Sprite: $sprite_id"
-    else
-      log "Destroying existing Sprite..."
-      sprite destroy -s "$sprite_name" --force 2>/dev/null || true
-      sleep 2  # Give it a moment to clean up
-
-      log "Creating new Sprite VM..."
-      set +e
-      sprite_output=$(sprite create "$sprite_name" 2>&1)
-      local sprite_exit_code=$?
-      set -e
-
-      if [[ $sprite_exit_code -ne 0 ]]; then
-        error "Failed to create Sprite"
-        echo "$sprite_output"
-        exit 1
-      fi
-      sprite_id="$sprite_name"
-      success "Sprite created: $sprite_id"
-    fi
-  else
-    log "Creating Sprite VM..."
-    set +e
-    sprite_output=$(sprite create "$sprite_name" 2>&1)
-    local sprite_exit_code=$?
-    set -e
-
-    if [[ $sprite_exit_code -ne 0 ]]; then
-      error "Failed to create Sprite"
-      if [[ -n "$sprite_output" ]]; then
-        echo "$sprite_output"
-      fi
-      echo ""
-      echo "Troubleshooting:"
-      echo "  - Check sprite version: sprite --version"
-      echo "  - Check auth status: sprite auth status"
-      echo "  - List existing sprites: sprite list"
-      exit 1
-    fi
-    sprite_id="$sprite_name"
-    success "Sprite created: $sprite_id"
-  fi
-
-  # Save sprite ID
-  echo "$sprite_id" > "$session_dir/sprite_id"
-  success "Sprite created: $sprite_id"
-
-  # Setup Sprite
-  setup_sprite "$session_dir" "$token"
+  # Sync session files to Sprite before starting
+  sync_session_to_sprite "$session_dir" "$sprite_id"
 
   # Run the loop
   run_loop "$session_dir"
 }
 
-# Get local Claude credentials and copy to sprite
+# Sync session files to sprite before running
+sync_session_to_sprite() {
+  local session_dir="$1"
+  local sprite_id="$2"
+
+  log "Syncing session files to Sprite..."
+
+  for file in tasks.json state.json history.json; do
+    if [[ -f "$session_dir/$file" ]]; then
+      copy_to_sprite "$sprite_id" "$session_dir/$file" "$SPRITE_SESSION_DIR/$file" || {
+        error "Failed to copy $file to Sprite"
+        exit 1
+      }
+    fi
+  done
+
+  success "Session files synced"
+}
+
+# Copy a file to the sprite
+copy_to_sprite() {
+  local sprite_id="$1"
+  local local_file="$2"
+  local remote_path="$3"
+
+  local encoded
+  encoded=$(base64 -w 0 < "$local_file" 2>/dev/null || base64 < "$local_file" | tr -d '\n')
+
+  sprite exec -s "$sprite_id" -- sh -c "echo '$encoded' | base64 -d > '$remote_path'" 2>&1
+}
+
+# Copy a file from the sprite
+copy_from_sprite() {
+  local sprite_id="$1"
+  local remote_path="$2"
+  local local_file="$3"
+
+  sprite exec -s "$sprite_id" -- cat "$remote_path" > "$local_file"
+}
+
+# NOTE: setup_claude_credentials, run_setup_claude, and setup_sprite have been
+# moved to init.sh since sprite setup now happens during init, not run.
+
+# Get local Claude credentials and copy to sprite (kept for backward compat)
 setup_claude_credentials() {
   local sprite_id="$1"
   local credentials=""
