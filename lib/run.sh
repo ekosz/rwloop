@@ -823,26 +823,67 @@ cmd_stop() {
   local session_dir
   session_dir=$(get_session_dir)
 
-  if ! confirm "This will delete the Sprite and cancel the session. Continue?" "n"; then
-    echo "Cancelled"
-    exit 0
+  # Show current state
+  local total_tasks=0
+  local completed_tasks=0
+  if [[ -f "$session_dir/tasks.json" ]]; then
+    total_tasks=$(jq 'length' "$session_dir/tasks.json" 2>/dev/null || echo 0)
+    completed_tasks=$(jq '[.[] | select(.passes == true)] | length' "$session_dir/tasks.json" 2>/dev/null || echo 0)
   fi
 
-  # Delete Sprite
-  if [[ -f "$session_dir/sprite_id" ]]; then
-    local sprite_id
-    sprite_id=$(cat "$session_dir/sprite_id")
-    log "Deleting Sprite..."
-    sprite destroy -s "$sprite_id" --force 2>/dev/null || true
-    rm "$session_dir/sprite_id"
-    success "Sprite deleted"
+  if [[ $total_tasks -gt 0 ]]; then
+    info "Tasks: $completed_tasks/$total_tasks completed"
   fi
 
-  # Update status
-  local config
-  config=$(read_session_config)
-  config=$(echo "$config" | jq '.status = "cancelled" | .cancelled_at = now')
-  write_session_config "$config"
+  echo ""
+  echo "What would you like to do?"
+  echo "  1) Stop and delete session (remove all data)"
+  echo "  2) Stop but keep session data (can resume or inspect later)"
+  echo "  3) Cancel"
+  echo ""
+  read -rp "Choice [1/2/3]: " choice
 
-  success "Session cancelled"
+  case "$choice" in
+    1)
+      # Delete Sprite
+      if [[ -f "$session_dir/sprite_id" ]]; then
+        local sprite_id
+        sprite_id=$(cat "$session_dir/sprite_id")
+        log "Deleting Sprite..."
+        sprite destroy -s "$sprite_id" --force 2>/dev/null || true
+        success "Sprite deleted"
+      fi
+
+      # Delete entire session
+      log "Deleting session data..."
+      rm -rf "$session_dir"
+      success "Session deleted completely"
+      ;;
+    2)
+      # Delete Sprite but keep session
+      if [[ -f "$session_dir/sprite_id" ]]; then
+        local sprite_id
+        sprite_id=$(cat "$session_dir/sprite_id")
+        log "Deleting Sprite..."
+        sprite destroy -s "$sprite_id" --force 2>/dev/null || true
+        rm "$session_dir/sprite_id"
+        success "Sprite deleted"
+      fi
+
+      # Update status
+      local config
+      config=$(read_session_config)
+      config=$(echo "$config" | jq '.status = "stopped" | .stopped_at = now')
+      write_session_config "$config"
+
+      success "Session stopped (data preserved at $session_dir)"
+      echo ""
+      echo "To start fresh next time, run: rwloop init <prd.md>"
+      echo "  You'll be prompted to delete or continue the existing session."
+      ;;
+    *)
+      echo "Cancelled"
+      exit 0
+      ;;
+  esac
 }

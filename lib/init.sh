@@ -23,6 +23,57 @@ cmd_init() {
   local project_id
   project_id=$(get_project_id)
 
+  # Check for existing session
+  if [[ -d "$session_dir" ]] && [[ -f "$session_dir/session.json" ]]; then
+    local existing_status
+    existing_status=$(jq -r '.status // "unknown"' "$session_dir/session.json" 2>/dev/null || echo "unknown")
+
+    # Check task progress
+    local total_tasks=0
+    local completed_tasks=0
+    if [[ -f "$session_dir/tasks.json" ]]; then
+      total_tasks=$(jq 'length' "$session_dir/tasks.json" 2>/dev/null || echo 0)
+      completed_tasks=$(jq '[.[] | select(.passes == true)] | length' "$session_dir/tasks.json" 2>/dev/null || echo 0)
+    fi
+
+    warn "Existing session found for this project"
+    info "Status: $existing_status"
+    if [[ $total_tasks -gt 0 ]]; then
+      info "Tasks: $completed_tasks/$total_tasks completed"
+    fi
+    echo ""
+
+    echo "What would you like to do?"
+    echo "  1) Start fresh (delete existing session)"
+    echo "  2) Continue with existing session (just update PRD)"
+    echo "  3) Cancel"
+    echo ""
+    read -rp "Choice [1/2/3]: " choice
+
+    case "$choice" in
+      1)
+        log "Deleting existing session..."
+        rm -rf "$session_dir"
+        success "Old session deleted"
+        ;;
+      2)
+        log "Continuing with existing session, updating PRD..."
+        cp "$prd_file" "$session_dir/prd.md"
+        success "PRD updated"
+        echo ""
+        echo "Next steps:"
+        echo "  rwloop plan --refresh   # Re-analyze and update tasks"
+        echo "  rwloop tasks            # View/edit tasks"
+        echo "  rwloop run              # Continue the loop"
+        exit 0
+        ;;
+      *)
+        echo "Cancelled"
+        exit 0
+        ;;
+    esac
+  fi
+
   log "Initializing session for project: $project_id"
 
   # Create session directory
