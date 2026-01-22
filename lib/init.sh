@@ -465,8 +465,9 @@ cmd_plan() {
   sprite exec -s "$sprite_id" -- sh -c "echo '$encoded_prompt' | base64 -d > /tmp/plan_system_prompt.txt"
 
   # Run Claude interactively inside the Sprite
-  # Use sprite console for interactive session
   log "Connecting to Sprite for planning session..."
+  echo ""
+  info "Type 'start' and press Enter to begin, or describe what you want to build."
   echo ""
 
   local claude_cmd="cd $SPRITE_REPO_DIR && HOME=/var/local/rwloop XDG_CONFIG_HOME=/var/local/rwloop/.config claude --system-prompt \"\$(cat /tmp/plan_system_prompt.txt)\" --dangerously-skip-permissions"
