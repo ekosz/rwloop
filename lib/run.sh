@@ -193,7 +193,7 @@ Work through each requirement and verify it's complete before moving on. If some
 
 When done, simply say 'Setup complete' - do not update any state files."
 
-  local cmd="cd $SPRITE_REPO_DIR && HOME=/var/local/rwloop claude -p \"$setup_prompt\" --dangerously-skip-permissions --max-turns 50"
+  local cmd="cd $SPRITE_REPO_DIR && HOME=/var/local/rwloop CLAUDE_CONFIG_DIR=$SPRITE_REPO_DIR claude -p \"$setup_prompt\" --dangerously-skip-permissions --max-turns 50"
 
   set +e
   sprite exec -s "$sprite_id" -- sh -c "$cmd" 2>&1 | while IFS= read -r line; do
@@ -439,8 +439,9 @@ run_iteration() {
   }
 
   # Run Claude on Sprite
+  # Set HOME for credentials, CLAUDE_CONFIG_DIR for project config (CLAUDE.md, skills)
   log "Running Claude on sprite..."
-  local cmd="cd $SPRITE_REPO_DIR && HOME=/var/local/rwloop claude -p \"\$(cat $prompt_file)\" --append-system-prompt \"\$(cat $context_file)\" --dangerously-skip-permissions --max-turns 200 --output-format stream-json --verbose"
+  local cmd="cd $SPRITE_REPO_DIR && HOME=/var/local/rwloop CLAUDE_CONFIG_DIR=$SPRITE_REPO_DIR claude -p \"\$(cat $prompt_file)\" --append-system-prompt \"\$(cat $context_file)\" --dangerously-skip-permissions --max-turns 200 --output-format stream-json --verbose"
 
   set +e
   sprite exec -s "$sprite_id" -- sh -c "$cmd" 2>&1 | while IFS= read -r line; do
