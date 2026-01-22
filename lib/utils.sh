@@ -123,14 +123,6 @@ require_session() {
   fi
 }
 
-# Check if session is active (Sprite running)
-is_session_active() {
-  local session_dir
-  session_dir=$(get_session_dir)
-
-  [[ -f "$session_dir/sprite_id" ]]
-}
-
 # Read session config
 read_session_config() {
   local session_dir
@@ -157,16 +149,6 @@ json_get() {
   local file="$1"
   local path="$2"
   jq -r "$path" "$file" 2>/dev/null || echo ""
-}
-
-json_set() {
-  local file="$1"
-  local path="$2"
-  local value="$3"
-  local tmp
-  tmp=$(mktemp)
-
-  jq "$path = $value" "$file" > "$tmp" && mv "$tmp" "$file"
 }
 
 # Count tasks by status
@@ -283,21 +265,6 @@ check_dependencies() {
   fi
 }
 
-# Spinner for long operations
-spinner() {
-  local pid=$1
-  local message="${2:-Working...}"
-  local spin='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
-  local i=0
-
-  while kill -0 "$pid" 2>/dev/null; do
-    i=$(( (i+1) % ${#spin} ))
-    printf "\r${CYAN}[%s]${NC} %s" "${spin:$i:1}" "$message"
-    sleep 0.1
-  done
-  printf "\r"
-}
-
 # Confirm prompt
 confirm() {
   local prompt="${1:-Continue?}"
@@ -315,32 +282,3 @@ confirm() {
   [[ "$response" =~ ^[Yy] ]]
 }
 
-# Wait for file to exist (with timeout)
-wait_for_file() {
-  local file="$1"
-  local timeout="${2:-60}"
-  local elapsed=0
-
-  while [[ ! -f "$file" ]] && [[ $elapsed -lt $timeout ]]; do
-    sleep 1
-    ((elapsed++))
-  done
-
-  [[ -f "$file" ]]
-}
-
-# Format duration (seconds to human readable)
-format_duration() {
-  local seconds=$1
-  local hours=$((seconds / 3600))
-  local minutes=$(((seconds % 3600) / 60))
-  local secs=$((seconds % 60))
-
-  if [[ $hours -gt 0 ]]; then
-    printf "%dh %dm %ds" $hours $minutes $secs
-  elif [[ $minutes -gt 0 ]]; then
-    printf "%dm %ds" $minutes $secs
-  else
-    printf "%ds" $secs
-  fi
-}
