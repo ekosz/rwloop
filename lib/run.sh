@@ -451,6 +451,9 @@ run_iteration() {
   log "Running Claude on sprite..."
   local cmd="cd $SPRITE_REPO_DIR && HOME=/var/local/rwloop XDG_CONFIG_HOME=/var/local/rwloop/.config CLAUDE_CONFIG_DIR=$SPRITE_REPO_DIR claude -p \"\$(cat $prompt_file)\" --append-system-prompt \"\$(cat $context_file)\" --dangerously-skip-permissions --max-turns 200 --output-format stream-json --verbose"
 
+  # Debug: show command being run
+  log "Command: $cmd"
+
   set +e
   sprite exec -s "$sprite_id" -- sh -c "$cmd" 2>&1 | while IFS= read -r line; do
     # Stream output - show assistant text
@@ -460,6 +463,9 @@ run_iteration() {
       info "Claude finished"
     elif [[ "$line" == "Error:"* ]] || [[ "$line" == "error:"* ]]; then
       warn "$line"
+    elif [[ -n "$line" ]] && [[ "$line" != "{"* ]]; then
+      # Show non-JSON output (likely errors or status messages)
+      echo "  $line"
     fi
   done
   local claude_exit=${PIPESTATUS[0]}
