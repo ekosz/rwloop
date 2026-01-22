@@ -286,6 +286,13 @@ setup_sprite_for_init() {
   done
 
   success "Sprite setup complete"
+
+  # Create checkpoint after setup for easy restore
+  log "Creating setup checkpoint..."
+  sprite checkpoint create -s "$sprite_id" || {
+    warn "Failed to create checkpoint (non-fatal)"
+  }
+  success "Checkpoint created"
 }
 
 # Get local Claude credentials and copy to sprite
