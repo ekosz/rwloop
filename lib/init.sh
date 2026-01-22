@@ -22,6 +22,51 @@ cmd_init() {
 
   check_dependencies
 
+  # Check that current branch exists on origin
+  local current_branch
+  current_branch=$(get_current_branch)
+
+  log "Checking branch '$current_branch' exists on origin..."
+
+  # Fetch to make sure we have latest remote info
+  git fetch origin --quiet 2>/dev/null || true
+
+  if ! git rev-parse --verify "origin/$current_branch" &>/dev/null; then
+    error "Branch '$current_branch' not found on origin."
+    echo ""
+    echo "The Sprite VM clones from origin, so your branch must be pushed first."
+    echo ""
+    echo "Push your branch with:"
+    echo "  git push -u origin $current_branch"
+    echo ""
+    echo "Then run 'rwloop init' again."
+    exit 1
+  fi
+
+  # Also check if local is ahead of origin (unpushed commits)
+  local local_commit remote_commit
+  local_commit=$(git rev-parse HEAD 2>/dev/null)
+  remote_commit=$(git rev-parse "origin/$current_branch" 2>/dev/null)
+
+  if [[ "$local_commit" != "$remote_commit" ]]; then
+    local ahead_count
+    ahead_count=$(git rev-list --count "origin/$current_branch..HEAD" 2>/dev/null || echo "0")
+    if [[ "$ahead_count" -gt 0 ]]; then
+      warn "You have $ahead_count unpushed commit(s) on '$current_branch'."
+      echo ""
+      if ! confirm "Continue anyway? (Sprite will use the remote version)" "n"; then
+        echo ""
+        echo "Push your commits with:"
+        echo "  git push origin $current_branch"
+        echo ""
+        echo "Then run 'rwloop init' again."
+        exit 0
+      fi
+    fi
+  fi
+
+  success "Branch '$current_branch' exists on origin"
+
   local session_dir
   session_dir=$(get_session_dir)
   local project_id
