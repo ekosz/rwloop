@@ -1,6 +1,23 @@
 # Iteration Instructions
 
-You are in iteration mode. Follow these steps exactly:
+You are in iteration mode. Follow these steps exactly.
+
+## IMPORTANT: Keep Context Small with Agents
+
+Your context window is precious - don't fill it with file contents. Use agents strategically:
+
+**For Reading/Searching (use Explore agents liberally):**
+- Spawn multiple explore agents in parallel to search the codebase
+- Have agents return summaries, not full file contents
+- Fan out: one agent per area (e.g., "find auth patterns", "check test structure", "look for utilities")
+
+**For Building/Testing (use ONE agent at a time):**
+- Builds and tests need sequential execution with full output visibility
+- Don't parallelize destructive or stateful operations
+
+**Rule of thumb:** If you need to understand code but not edit it, use an explore agent. Only read files directly into your context when you're about to modify them.
+
+---
 
 ## Step 1: Read State Files
 
@@ -29,14 +46,19 @@ If all tasks have `passes: true`:
 
 ### CRITICAL GUARDRAIL: Search Before Implementing
 
-Before implementing ANY functionality:
-1. **Search the codebase** for existing implementations
-2. **Check shared libraries and utilities first** - look in `/lib`, `/utils`, `/shared`, `/common`
-3. **Don't assume something doesn't exist** - verify first by searching
-4. **Treat existing shared libraries as single source of truth**
-5. **Fan out searches to subagents** to preserve main context
+Before implementing ANY functionality, use **explore agents** to search:
 
-This prevents duplicate code and reinventing existing patterns.
+1. **Spawn parallel explore agents** to search for:
+   - Existing implementations of similar features
+   - Shared libraries and utilities (`/lib`, `/utils`, `/shared`, `/common`)
+   - Patterns used elsewhere in the codebase
+   - Related tests to understand expected behavior
+
+2. **Don't assume something doesn't exist** - verify first by searching
+3. **Treat existing shared libraries as single source of truth**
+4. **Only read files directly** when you're ready to modify them
+
+This prevents duplicate code, reinventing existing patterns, AND keeps your context small.
 
 ### Implementation Steps
 
