@@ -358,7 +358,7 @@ Work through each requirement and verify it's complete before moving on. If some
 
 When done, simply say 'Setup complete' - do not update any state files."
 
-  local cmd="cd $SPRITE_REPO_DIR && HOME=/var/local/rwloop XDG_CONFIG_HOME=/var/local/rwloop/.config CLAUDE_CONFIG_DIR=$SPRITE_REPO_DIR claude -p \"$setup_prompt\" --dangerously-skip-permissions --max-turns 50"
+  local cmd="cd $SPRITE_REPO_DIR && HOME=/var/local/rwloop XDG_CONFIG_HOME=/var/local/rwloop/.config claude -p \"$setup_prompt\" --dangerously-skip-permissions --max-turns 50"
 
   echo ""
 
@@ -477,7 +477,7 @@ cmd_plan() {
   info "Type 'start' and press Enter to begin, or describe what you want to build."
   echo ""
 
-  local claude_cmd="cd $SPRITE_REPO_DIR && HOME=/var/local/rwloop XDG_CONFIG_HOME=/var/local/rwloop/.config CLAUDE_CONFIG_DIR=$SPRITE_REPO_DIR claude --system-prompt \"\$(cat /tmp/plan_system_prompt.txt)\" --dangerously-skip-permissions"
+  local claude_cmd="cd $SPRITE_REPO_DIR && HOME=/var/local/rwloop XDG_CONFIG_HOME=/var/local/rwloop/.config claude --system-prompt \"\$(cat /tmp/plan_system_prompt.txt)\" --dangerously-skip-permissions"
 
   set +e
   sprite exec -s "$sprite_id" -tty -- sh -c "$claude_cmd"
