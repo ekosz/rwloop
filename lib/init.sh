@@ -354,7 +354,7 @@ When done, simply say 'Setup complete' - do not update any state files."
   # Run with unbuffered output for real-time streaming
   # The -t flag allocates a pseudo-TTY which helps with streaming
   set +e
-  sprite exec -s "$sprite_id" -t -- sh -c "$cmd"
+  sprite exec -s "$sprite_id" -tty -- sh -c "$cmd"
   local exit_code=$?
   set -e
 
@@ -467,7 +467,7 @@ cmd_plan() {
 
   local claude_cmd="cd $SPRITE_REPO_DIR && HOME=/var/local/rwloop claude --system-prompt \"\$(cat /tmp/plan_system_prompt.txt)\" --dangerously-skip-permissions"
 
-  sprite exec -s "$sprite_id" -it -- sh -c "$claude_cmd"
+  sprite exec -s "$sprite_id" -tty -- sh -c "$claude_cmd"
 
   echo ""
   log "Planning session ended. Syncing results..."
