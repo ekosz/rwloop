@@ -471,23 +471,41 @@ run_iteration() {
 is_stuck() {
   local session_dir="$1"
   local history_file="$session_dir/history.json"
+  local progress_file="$session_dir/progress_tracker"
+  local tasks_file="$session_dir/tasks.json"
 
-  if [[ ! -f "$history_file" ]]; then
+  if [[ ! -f "$history_file" ]] || [[ ! -f "$tasks_file" ]]; then
     return 1
   fi
 
   local history_length
   history_length=$(jq 'length' "$history_file")
 
-  if [[ $history_length -lt $STUCK_THRESHOLD ]]; then
+  # Get current completed count directly from tasks.json
+  local current_completed
+  current_completed=$(jq '[.[] | select(.passes == true)] | length' "$tasks_file")
+
+  # Initialize or read progress tracker
+  # Format: "iteration:completed_count" for last check
+  if [[ ! -f "$progress_file" ]]; then
+    echo "${history_length}:${current_completed}" > "$progress_file"
     return 1
   fi
 
-  # Check if tasks_completed changed in last N iterations
-  local recent_completions
-  recent_completions=$(jq -r "[.[-$STUCK_THRESHOLD:][].tasks_completed] | unique | length" "$history_file")
+  local last_check_iteration last_completed
+  IFS=':' read -r last_check_iteration last_completed < "$progress_file"
 
-  [[ "$recent_completions" -eq 1 ]]
+  # Only check every STUCK_THRESHOLD iterations
+  local iterations_since_check=$((history_length - last_check_iteration))
+  if [[ $iterations_since_check -lt $STUCK_THRESHOLD ]]; then
+    return 1
+  fi
+
+  # Update tracker for next check
+  echo "${history_length}:${current_completed}" > "$progress_file"
+
+  # If completed count hasn't changed since last check, we're stuck
+  [[ "$current_completed" -eq "$last_completed" ]]
 }
 
 handle_pause() {

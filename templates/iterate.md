@@ -152,10 +152,11 @@ Add a new entry:
 {
   "iteration": 5,
   "summary": "Completed task 1: Set up TypeScript config",
-  "tasks_completed": 1,
+  "tasks_completed": 3,
   "status": "CONTINUE"
 }
 ```
+Note: `tasks_completed` is the **total** number of tasks with `passes: true` (not just this iteration).
 
 ## Rules
 
